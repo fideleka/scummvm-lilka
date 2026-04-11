@@ -7,3 +7,6 @@ build/
 # externalproject_add scratch dirs created when building the ScummVM libs
 components/scummvm/src/
 components/scummvm/tmp/
+
+# merged-image artifact (attach to GitHub Releases instead of committing)
+scummvm-tdeck-full.bin
