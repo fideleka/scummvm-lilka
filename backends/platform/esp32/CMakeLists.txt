@@ -4,7 +4,17 @@
 # CMakeLists in this exact order for cmake to work correctly
 cmake_minimum_required(VERSION 3.16)
 
-set(ENV{BUILD_BOARD} esp32_p4_function_ev_board_noglib)
+# Target: LilyGo T-Deck v1 (ESP32-S3).
+# No BSP component is used — T-Deck peripherals are driven directly with
+# ESP-IDF's esp_lcd, i2s_std, i2c, gpio and sdspi_host drivers.
 
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 project(scummvm)
+
+# Build a LittleFS image from flash_data/ and bundle it with idf.py flash.
+# LittleFS (vs SPIFFS) gives us real directories, which ScummVM needs in
+# order to stat() the game data path before launching.
+littlefs_create_partition_image(storage
+	${CMAKE_CURRENT_SOURCE_DIR}/flash_data
+	FLASH_IN_PROJECT
+)

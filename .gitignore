@@ -11,6 +11,7 @@ lib*.a
 *_pch.cpp
 
 /config.log
+/esp32dist
 /scummvm
 /libscummvm.so
 /scummvm-static

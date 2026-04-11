@@ -1,13 +1,32 @@
-idf_component_register(SRCS "main.cpp" "esp-graphics.cpp" "esp-mixer.cpp" "posixesp-fs-factory.cpp"
-						"usb_hid.c" "mmc.c" "esp-mutex.cpp"
-                    INCLUDE_DIRS "."
-					EMBED_FILES "loading.png")
-
-#hack: otherwise audio.c is not linked
-#should actually factor refactor all things called by quake into a separate component
-#target_link_libraries(${COMPONENT_LIB} INTERFACE "-u Window_Init -u CDAudio_Init")
+idf_component_register(
+	SRCS
+		"main.cpp"
+		"esp-graphics.cpp"
+		"esp-mixer.cpp"
+		"posixesp-fs-factory.cpp"
+		"mmc.c"
+		"esp-mutex.cpp"
+		"tdeck_board.c"
+		"tdeck_kbd.c"
+		"tdeck_trackball.c"
+	INCLUDE_DIRS "."
+	PRIV_REQUIRES
+		driver
+		esp_driver_i2c
+		esp_driver_i2s
+		esp_driver_sdspi
+		esp_driver_spi
+		esp_lcd
+		esp_timer
+		fatfs
+		sdmmc
+		joltwallet__littlefs
+		vfs
+		blkcache
+		scummvm
+	EMBED_FILES "loading.png"
+)
 
 target_compile_options(${COMPONENT_LIB} PRIVATE -DHAVE_CONFIG_H)
 
 idf_build_set_property(COMPILE_OPTIONS "-Wno-error=reorder" APPEND)
-

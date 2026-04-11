@@ -14,59 +14,47 @@
 
 #include "sdkconfig.h"
 #include "driver/gpio.h"
-#include "driver/ledc.h"
 #include "esp_err.h"
 #include "esp_log.h"
 #include "esp_check.h"
-#include "esp_spiffs.h"
-#include "esp_lcd_panel_ops.h"
-#include "esp_lcd_mipi_dsi.h"
-#include "esp_ldo_regulator.h"
 #include "esp_vfs_fat.h"
-#include "usb/usb_host.h"
-#include "sd_pwr_ctrl_by_on_chip_ldo.h"
-#include "bsp/esp32_p4_function_ev_board.h"
+#include "esp_littlefs.h"
+#include "sdmmc_cmd.h"
+#include "driver/sdspi_host.h"
 #include "blkcache.h"
-#include "esp_check.h"
 #include "ff.h"
 #include "diskio_impl.h"
-#include "sdmmc_cmd.h"
+#include "tdeck_board.h"
 
-static const char *TAG = "ESP32_P4_EV";
+static const char *TAG = "tdeck_sd";
 
 static sdmmc_card_t card;
 static blkcache_handle_t *bc;
 FATFS *fatfs;
 
+static DSTATUS dio_init(unsigned char pdrv)   { return 0; }
+static DSTATUS dio_status(unsigned char pdrv) { return 0; }
 
-static DSTATUS dio_init (unsigned char pdrv) {
-	return 0;
-}
-
-static DSTATUS dio_status (unsigned char pdrv) {
-	return 0;
-}
-
-static DRESULT dio_read (unsigned char pdrv, unsigned char *buff, uint32_t sector, unsigned count) {
+static DRESULT dio_read(unsigned char pdrv, unsigned char *buff, uint32_t sector, unsigned count) {
 	blkcache_read_sectors(bc, buff, sector, count);
 	return RES_OK;
 }
 
-static DRESULT dio_write (unsigned char pdrv, const unsigned char *buff, uint32_t sector, unsigned count) {
+static DRESULT dio_write(unsigned char pdrv, const unsigned char *buff, uint32_t sector, unsigned count) {
 	blkcache_write_sectors(bc, buff, sector, count);
 	return RES_OK;
 }
 
-static DRESULT dio_ioctl (unsigned char pdrv, unsigned char cmd, void *buff) {
-	if (cmd==CTRL_SYNC) {
-		//todo
-	} else if (cmd==GET_SECTOR_COUNT) {
-		*((DWORD*) buff) = card.csd.capacity;
-	} else if (cmd==GET_SECTOR_SIZE) {
-		*((DWORD*) buff) = card.csd.sector_size;
-	} else if (cmd==GET_BLOCK_SIZE) {
+static DRESULT dio_ioctl(unsigned char pdrv, unsigned char cmd, void *buff) {
+	if (cmd == CTRL_SYNC) {
+		// nothing to do
+	} else if (cmd == GET_SECTOR_COUNT) {
+		*((DWORD *)buff) = card.csd.capacity;
+	} else if (cmd == GET_SECTOR_SIZE) {
+		*((DWORD *)buff) = card.csd.sector_size;
+	} else if (cmd == GET_BLOCK_SIZE) {
 		return RES_ERROR;
-	} else if (cmd==CTRL_TRIM) {
+	} else if (cmd == CTRL_TRIM) {
 		return RES_ERROR;
 	} else {
 		return RES_ERROR;
@@ -75,69 +63,94 @@ static DRESULT dio_ioctl (unsigned char pdrv, unsigned char cmd, void *buff) {
 }
 
 void sdcard_mount_blkcache(const char *mountpoint, int files) {
-	sd_pwr_ctrl_ldo_config_t ldo_config = {
-		.ldo_chan_id = 4,
-	};
-	sd_pwr_ctrl_handle_t pwr_ctrl_handle = NULL;
-	esp_err_t ret = sd_pwr_ctrl_new_on_chip_ldo(&ldo_config, &pwr_ctrl_handle);
-	if (ret != ESP_OK) {
-		ESP_LOGE(TAG, "Failed to create a new on-chip LDO power control driver");
-		return;
+	// The shared SPI bus must already be initialized by tdeck_board_init().
+	tdeck_board_init();
+
+	// Mount the baked-in LittleFS partition first, at /sdcard. This is
+	// always present so ScummVM can find the bundled MI1 EGA demo and
+	// the support files we shipped with the firmware. If a real SD card
+	// is also inserted, it will be exposed at /sd (see below) so its
+	// contents are still reachable but don't shadow the bundled data.
+	{
+		esp_vfs_littlefs_conf_t lfs_cfg = {
+			.base_path = mountpoint,
+			.partition_label = "storage",
+			.format_if_mount_failed = false,
+			.dont_mount = false,
+		};
+		esp_err_t le = esp_vfs_littlefs_register(&lfs_cfg);
+		if (le != ESP_OK) {
+			ESP_LOGE(TAG, "LittleFS mount failed: %s", esp_err_to_name(le));
+		} else {
+			size_t total = 0, used = 0;
+			if (esp_littlefs_info("storage", &total, &used) == ESP_OK) {
+				ESP_LOGI(TAG, "LittleFS mounted at %s: %u/%u bytes used",
+				         mountpoint, (unsigned)used, (unsigned)total);
+			}
+		}
 	}
 
-	sdmmc_host_t host = SDMMC_HOST_DEFAULT();
-	host.slot = SDMMC_HOST_SLOT_0;
-//	host.max_freq_khz = SDMMC_FREQ_HIGHSPEED;
-	host.max_freq_khz =	 SDMMC_FREQ_52M;
-	host.pwr_ctrl_handle = pwr_ctrl_handle;
-	const sdmmc_slot_config_t slot_config = {
-		/* SD card is connected to Slot 0 pins. Slot 0 uses IO MUX, so not specifying the pins here */
-		.cd = SDMMC_SLOT_NO_CD,
-		.wp = SDMMC_SLOT_NO_WP,
-		.width = 4,
-		.flags = 0,
-	};
-	ESP_ERROR_CHECK(sdmmc_host_init());
-	ESP_ERROR_CHECK(sdmmc_host_init_slot(host.slot, &slot_config));
-	ESP_ERROR_CHECK(sdmmc_card_init(&host, &card));
-	sdmmc_card_print_info(stdout, &card);
+	// Now ALSO try to mount the physical SD card at /sd (a different
+	// mount point). If it fails, no harm done — the bundled LittleFS
+	// game still works.
+	sdmmc_host_t host = SDSPI_HOST_DEFAULT();
+	host.slot = TDECK_SPI_HOST;
+	host.max_freq_khz = SDMMC_FREQ_PROBING;
 
-	blkcache_config_t bcfg={
-		.blksize=1024*32,
-		.blkcount=16,
-		.read_sectors_cb=(read_sectors_t)sdmmc_read_sectors,
-		.write_sectors_cb=(write_sectors_t)sdmmc_write_sectors,
-		.arg=(void*)&card
+	sdspi_device_config_t slot_config = SDSPI_DEVICE_CONFIG_DEFAULT();
+	slot_config.gpio_cs = TDECK_SD_CS_GPIO;
+	slot_config.host_id = TDECK_SPI_HOST;
+
+	sdspi_dev_handle_t sdspi_handle;
+	ESP_ERROR_CHECK(sdspi_host_init());
+	ESP_ERROR_CHECK(sdspi_host_init_device(&slot_config, &sdspi_handle));
+	host.slot = sdspi_handle;
+
+	esp_err_t err = sdmmc_card_init(&host, &card);
+	if (err != ESP_OK) {
+		ESP_LOGW(TAG, "Physical SD card init failed: %s (LittleFS at %s still works)",
+		         esp_err_to_name(err), mountpoint);
+		return;
+	}
+	ESP_LOGI(TAG, "Physical SD card detected, mounting at /sd");
+	sdmmc_card_print_info(stdout, &card);
+	// Now that the card is identified, bump to 10 MHz for bulk transfers.
+	sdspi_host_set_card_clk(sdspi_handle, 10000);
+
+	blkcache_config_t bcfg = {
+		.blksize = 1024 * 32,
+		.blkcount = 16,
+		.read_sectors_cb = (read_sectors_t)sdmmc_read_sectors,
+		.write_sectors_cb = (write_sectors_t)sdmmc_write_sectors,
+		.arg = (void *)&card
 	};
 	blkcache_init(&bcfg, &bc);
 
-	ff_diskio_impl_t discio={
-		.init=dio_init,
-		.status=dio_status,
-		.read=dio_read,
-		.write=dio_write,
-		.ioctl=dio_ioctl
+	ff_diskio_impl_t discio = {
+		.init = dio_init,
+		.status = dio_status,
+		.read = dio_read,
+		.write = dio_write,
+		.ioctl = dio_ioctl
 	};
 
 	BYTE pdrv = 0xFF;
 	if (ff_diskio_get_drive(&pdrv) != ESP_OK) {
-		printf("Out of drive numbers\n");
+		ESP_LOGE(TAG, "Out of drive numbers");
+		return;
 	}
-	printf("diskio: pdrv %hhd\n", pdrv);
 	ff_diskio_register(pdrv, &discio);
 
-	char drv[3]={'0'+pdrv, ':', 0};
+	char drv[3] = {'0' + pdrv, ':', 0};
 	esp_vfs_fat_conf_t conf = {
-		.base_path = mountpoint, //"/sdcard"
+		.base_path = "/sd",   // physical SD card lives at /sd
 		.fat_drive = drv,
 		.max_files = files,
 	};
 	ESP_ERROR_CHECK(esp_vfs_fat_register_cfg(&conf, &fatfs));
 
-	FRESULT fr=f_mount(fatfs, drv, 1);
-	if (fr!=FR_OK) {
-		printf("f_mount failed %d\n", fr);
+	FRESULT fr = f_mount(fatfs, drv, 1);
+	if (fr != FR_OK) {
+		ESP_LOGE(TAG, "f_mount failed %d", fr);
 	}
 }
-
-

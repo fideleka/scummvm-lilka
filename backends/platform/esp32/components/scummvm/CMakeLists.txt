@@ -1,9 +1,11 @@
 
 #Enable engines to compile in here.
-set(ENGINES groovie scumm agi sky sci queen parallaction sword1 sword2 dreamweb)
+# T-Deck S3 starter set — small and fast to build. Add more once the
+# base system is stable (see README for the full list of candidates).
+set(ENGINES scumm agi sky queen dreamweb)
 
 #Sub-engines (indicated by a dash in the ./configure help)
-set(SUBENGINES scumm-7-8 he sci32)
+set(SUBENGINES he)
 
 #Note you may need to delete the build/ directory to force a reconfigure after 
 #changing this.
@@ -49,8 +51,8 @@ externalproject_add(scummvm_build
 	CONFIGURE_COMMAND cd ${SCUMMVM_DIR}
 		#Note script uses this to figure out prefix
 		COMMAND export HOST_ALIAS=${hostalias}
-		COMMAND export CXXFLAGS=${CMAKE_CXX_FLAGS}
-		COMMAND export CFLAGS=${CMAKE_C_FLAGS}
+		COMMAND export CXXFLAGS=${CMAKE_CXX_FLAGS}\ -DESP_PLATFORM=1
+		COMMAND export CFLAGS=${CMAKE_C_FLAGS}\ -DESP_PLATFORM=1
 		COMMAND ./configure --host=esp32 --enable-vkeybd --disable-all-engines ${ENGINE_SW}
 	BUILD_IN_SOURCE 1
 	BUILD_ALWAYS 0

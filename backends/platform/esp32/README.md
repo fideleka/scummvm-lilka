@@ -1,67 +1,72 @@
 
-Scummvm for ESP32P4
-===================
+ScummVM for LilyGo T-Deck (ESP32-S3)
+====================================
 
-This is a fork of [ScummVM](https://github.com/scummvm/scummvm) that can build a ESP32P4 Scummvm backend. It's intended to run
-on an ESP32-P4-Function-EV board with attached 1024x600 MIPI display, plus optionally
-a standard keyboard connected to the USB host port. The backend code that adds this
-support is located in /backends/platform/esp32.
+This is a fork of [ScummVM](https://github.com/scummvm/scummvm) that can build
+a ScummVM backend for the [LilyGo T-Deck v1](https://github.com/Xinyuan-LilyGO/T-Deck)
+(ESP32-S3, 16 MB flash, 8 MB octal PSRAM, 320x240 ST7789 SPI display,
+MAX98357A I2S speaker amp, BlackBerry Q10 I2C keyboard, optical trackball,
+microSD). The backend code is located in `/backends/platform/esp32`.
+
+The original ESP32-P4 backend (MIPI-DSI, PPA scaler, USB-HID keyboard) lives
+on the `esp32p4-ev` branch if you want it.
 
 Building
 --------
 
-You'll need an up-to-date version of ESP-IDF (currently master, but 5.3.x may work) to 
-built this. With that ESP-IDF active, simply run ``idf.py --preview set-target esp32p4``
-and ``idf.py flash`` to build and flash the binary. Note building and flashing can
-take a while as a lot of code is linked in: the final binary is >10MiB.
+You need ESP-IDF 5.3 or newer. With it active:
+
+```
+cd backends/platform/esp32
+idf.py set-target esp32s3
+idf.py flash monitor
+```
+
+Building is slow the first time because ScummVM's `configure` and `make libs`
+run as part of the IDF build. The final binary is around 10 MiB.
 
 Preparing the SD card
 ---------------------
 
-To run games, you need a micro-SD-card (formatted in FAT) with both the ScummVM support
-files as well as any games you want to run on it. To build the support files, go to the 
-ScummVM root directory and run ``make esp32dist``. This should generate an ``esp32dist``
-folder containing a ``scummvm`` folder. Copy the ``scummvm`` folder to the root of the
-micro-SD-card.
+You need a microSD card (FAT-formatted) containing both the ScummVM support
+files and any games you want to run. To build the support files, from the
+ScummVM root run:
 
-You can put games anywhere in the micro-SD card as the GUI will allow you to browse for
-them when you add them. You can get some from [the ScummVM site](https://www.scummvm.org/games/).
-Beneath a Steel Sky, Dreamweb, Flight of the Amazon Queen and Nippon Safes has been
-tested to at least start. Others may work, but may not have their engines enabled. Broken 
-Sword 2.5 does not work as it requires more RAM than is available.
+```
+make esp32dist
+```
 
-Running the games
------------------
+This generates an `esp32dist/scummvm` folder. Copy that `scummvm` folder to
+the root of the SD card. Put game folders anywhere else on the card — the
+GUI file browser will find them.
 
-First, add the game. Press 'Add game...', select the game folder, then select 'Choose'. Press 'OK'
-on the next sceen. Finally, with the game selected, press 'Start' to start it.
+Freeware games known to at least start on this backend:
+*Beneath a Steel Sky*, *Dreamweb*, *Flight of the Amazon Queen*. More can be
+enabled by editing the engine list in
+`backends/platform/esp32/components/scummvm/CMakeLists.txt`.
 
-Saving and loading depends on the engine selected. For instance, ScummVM games use the 'F5' key,
-while in The 7th Guest, touching the top black matte above the active video area brings up
-a menu.
+Input
+-----
 
-By touching the screen with two fingers, you can bring up an onscreen keyboard. This can be useful for
-casual use (e.g. to use F5 to save a game in Lucasarts games). It is also possible to plug in
-an USB keyboard, e.g. for text interpreter based games.
+- **BBQ10 keyboard**: ASCII typing, enter, backspace, space, arrow-key glyphs.
+- **Speaker key** (top-left extra button) → F5 (save menu in LucasArts games).
+- **Mic key** → F7 (load menu).
+- **Sym / alt key** → Alt modifier.
+- **Trackball**: moves the mouse cursor. Center click = left mouse button.
 
-Enabling more engines
----------------------
+Engines enabled by default
+--------------------------
 
-To keep the size of the binary in check, not all engines have been enabled. If you want your 
-favourite engine to be enabled, you can look up the engine name by running the configure
-script in the root directory as ``./configure --help``. Then add the engine name in the
-``backends/platform/esp32/components/scummvm/CMakeLists.txt`` file. (ToDo: add support for
-this in KConfig)
+`scumm` (+ `he`), `agi`, `sky`, `queen`, `dreamweb`. Edit
+`components/scummvm/CMakeLists.txt` to change the set. Note that adding heavy
+engines like `sci`, `sword2` or `groovie` may not be playable due to CPU and
+RAM constraints on the S3.
 
+Known issues
+------------
 
-Issues
-------
-
-* When using the Scummvm load/save option, you need an USB keyboard to enter a name as the onscreen
-  keyboard does not work.
-
-* Some games assume they're driven by a computer mouse and require either hovering of the cursor without
-  clicking, or clicking with the left mouse button. These are not possible with the current touchscreen
-  code.
-
-* No volume control support yet.
+- Games larger than 320x240 are downscaled with nearest-neighbour filtering
+  and look pixelated. True 320x200 games are letterboxed (20 px black bars
+  top/bottom).
+- No volume control yet (software scaling TODO).
+- No Wi-Fi, LoRa, GPS or power management wiring.

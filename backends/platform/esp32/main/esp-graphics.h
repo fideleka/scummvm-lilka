@@ -28,8 +28,6 @@
 #include "esp_lcd_panel_interface.h"
 #include "esp_lcd_panel_io_interface.h"
 #include "esp_lcd_panel_ops.h"
-#include "driver/ppa.h"
-#include "bsp/touch.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/semphr.h"
@@ -51,11 +49,7 @@ public:
 
 	Common::List<Graphics::PixelFormat> getSupportedFormats() const override {
 		Common::List<Graphics::PixelFormat> list;
-		list.push_back(Graphics::PixelFormat(2, 5, 6, 5, 0, 11,  5,  0,  0)); // BBDoU, Frotz, HDB, Hopkins, Nuvie, Petka, Riven, Sherlock (3DO), Titanic, Tony, Ultima 4, Ultima 8, ZVision
-		list.push_back(Graphics::PixelFormat(4, 8, 8, 8, 8, 24, 16,  8,  0)); // Full Pipe, Gnap (little endian), Griffon, Groovie 2, SCI32 (HQ videos), Sludge, Sword25, Ultima 8, Wintermute
-		list.push_back(Graphics::PixelFormat(4, 8, 8, 8, 8,  0,  8, 16, 24)); // Gnap (big endian)
-		list.push_back(Graphics::PixelFormat(2, 5, 5, 5, 0, 10,  5,  0,  0)); // SCUMM HE99+, Last Express
-		list.push_back(Graphics::PixelFormat(2, 5, 5, 5, 1, 10,  5,  0, 15)); // Dragons
+		list.push_back(Graphics::PixelFormat(2, 5, 6, 5, 0, 11,  5,  0,  0));
 		list.push_back(Graphics::PixelFormat::createFormatCLUT8());
 		return list;
 	}
@@ -84,7 +78,7 @@ public:
 	void showOverlay(bool inGUI) override { _overlayVisible = true; }
 	void hideOverlay() override { _overlayVisible = false; }
 	bool isOverlayVisible() const override { return _overlayVisible; }
-	//RGB565 as used in display
+	// RGB565 as used in display
 	Graphics::PixelFormat getOverlayFormat() const override { return Graphics::PixelFormat(2, 5, 6, 5, 0, 11, 5, 0, 0); }
 	void clearOverlay() override;
 	void grabOverlay(Graphics::Surface &surface) const override;
@@ -92,32 +86,84 @@ public:
 	int16 getOverlayHeight() const override;
 	int16 getOverlayWidth() const override;
 
-	bool showMouse(bool visible) override { return !visible; }
-	void warpMouse(int x, int y) override {}
-	void setMouseCursor(const void *buf, uint w, uint h, int hotspotX, int hotspotY, uint32 keycolor, bool dontScale = false, const Graphics::PixelFormat *format = NULL, const byte *mask = NULL) override {}
-	void setCursorPalette(const byte *colors, uint start, uint num) override {}
-
-	int getTouch(Common::Point &pos);
+	bool showMouse(bool visible) override {
+		bool prev = _cursorVisible;
+		_cursorVisible = visible;
+		return prev;
+	}
+	void warpMouse(int x, int y) override {
+		_cursorX = x;
+		_cursorY = y;
+	}
+	void setMouseCursor(const void *buf, uint w, uint h, int hotspotX, int hotspotY,
+	                    uint32 keycolor, bool dontScale = false,
+	                    const Graphics::PixelFormat *format = NULL,
+	                    const byte *mask = NULL) override;
+	void setCursorPalette(const byte *colors, uint start, uint num) override;
 
 private:
 	static void gfxTaskStub(void *arg);
 	void gfxTask();
 
-	uint _width, _height;
+	void flushToPanel(const Common::Rect &r);
+	void drawCursorInto(uint16_t *fb, int fb_w, int fb_h,
+	                    int originX, int originY, int scaleW, int scaleH);
+
+	uint _width = 0;
+	uint _height = 0;
 	Graphics::PixelFormat _format;
-	Graphics::Surface _surf[2];
-	byte _pal[2][256*3];
-	Common::Rect _dirty[2];
-	bool _overlayVisible;
-	int64_t _last_time_updated;
+	Graphics::Surface _surf;              // game framebuffer (CLUT8 or RGB565)
+	byte _pal[256 * 3];
+	uint16_t _pal16[256];
+	bool _palDirty = true;
+	Common::Rect _dirty;
+	bool _overlayVisible = false;
+	int64_t _last_time_updated = 0;
+
 	esp_lcd_panel_handle_t _panel_handle = NULL;
 	esp_lcd_panel_io_handle_t _io_handle = NULL;
-	esp_lcd_touch_handle_t _touch_handle;
-	ppa_client_handle_t _ppa;
+
+	// Single full RGB565 framebuffer that mirrors what the LCD shows.
+	// Sized to the physical panel (320x240) and allocated in internal
+	// DMA-capable RAM so esp_lcd_panel_draw_bitmap can stream straight
+	// from it.
+	uint16_t *_panelfb = nullptr;
+	int _panelW = 320;
+	int _panelH = 240;
+
+public:
+	// Set the panel framebuffer from outside (before init()). Used by
+	// app_main() to pre-allocate the 150 KB DMA-capable internal RAM
+	// block while that RAM is still plentiful.
+	static void preallocatePanelFb();
+	static uint16_t *takePreallocatedPanelFb();
+private:
+
+	// Game-to-panel mapping (letterbox / downscale parameters computed
+	// in initSize).
+	int _dstX = 0;          // destination origin on panel
+	int _dstY = 0;
+	int _dstW = 0;          // destination area size on panel
+	int _dstH = 0;
+
+	// Overlay surface (always panel resolution, RGB565).
 	Graphics::Surface _overlay;
-	int _cur_fb;
-	QueueHandle_t _fb_num_q;
-	QueueHandle_t _fb_ret_q;
+
+	// Software mouse cursor.
+	bool _cursorVisible = false;
+	int _cursorX = 0;
+	int _cursorY = 0;
+	int _cursorHotX = 0;
+	int _cursorHotY = 0;
+	uint _cursorW = 0;
+	uint _cursorH = 0;
+	uint32 _cursorKey = 0;
+	byte *_cursorData = nullptr;
+	byte _cursorPal[256 * 3];
+	bool _cursorHasPal = false;
+
+	SemaphoreHandle_t _panelLock = nullptr;
+	SemaphoreHandle_t _drawDone = nullptr;
 };
 
 #endif

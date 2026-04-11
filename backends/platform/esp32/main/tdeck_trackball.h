@@ -19,34 +19,36 @@
  *
  */
 
-#ifndef BACKENDS_MIXER_ESP_H
-#define BACKENDS_MIXER_ESP_H
+/*
+ * T-Deck optical trackball driver.
+ *
+ * Four GPIO lines pulse as the ball rotates in each cardinal direction;
+ * a fifth GPIO is the center button. ISRs count pulses; poll() drains
+ * them into an accumulated (dx, dy) and a click edge.
+ */
 
-#include "backends/mixer/mixer.h"
+#ifndef BACKENDS_PLATFORM_ESP32_TDECK_TRACKBALL_H
+#define BACKENDS_PLATFORM_ESP32_TDECK_TRACKBALL_H
 
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
-#include "freertos/semphr.h"
-#include "driver/i2s_std.h"
+#include <stdbool.h>
+#include <stdint.h>
 
-class EspMixerManager : public MixerManager {
-public:
-	EspMixerManager(int freq, int bufSize);
-	virtual ~EspMixerManager();
+#ifdef __cplusplus
+extern "C" {
+#endif
 
-	virtual void init();
-	virtual void suspendAudio();
-	virtual int resumeAudio();
+typedef struct {
+	int dx;
+	int dy;
+	int8_t click_down;  // 1 = click edge down, -1 = up, 0 = no change
+} tdeck_trackball_state_t;
 
-private:
-	static void audioTaskStub(void *arg);
-	void audioTask();
+void tdeck_trackball_init(void);
+// Drain accumulated motion + click edges since last call. Always writes *out.
+void tdeck_trackball_poll(tdeck_trackball_state_t *out);
 
-	i2s_chan_handle_t _tx_handle = nullptr;
-
-protected:
-	int _freq;
-	int _bufSize;
-};
+#ifdef __cplusplus
+}
+#endif
 
 #endif

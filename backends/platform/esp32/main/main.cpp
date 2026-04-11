@@ -21,13 +21,19 @@
 
 
 #define FORBIDDEN_SYMBOL_ALLOW_ALL
+#define FORBIDDEN_SYMBOL_EXCEPTION_FILE
+#define FORBIDDEN_SYMBOL_EXCEPTION_fopen
+#define FORBIDDEN_SYMBOL_EXCEPTION_fclose
 
 #include <time.h>
 #include <sys/time.h>
+#include <sys/stat.h>
 #include <unistd.h>
 #include "esp_log.h"
-#include "bsp/esp-bsp.h"
 #include "posixesp-fs-factory.h"
+#include "tdeck_board.h"
+#include "tdeck_kbd.h"
+#include "tdeck_trackball.h"
 
 #define TAG "main"
 
@@ -49,8 +55,6 @@
 #include "freertos/task.h"
 #include "freertos/semphr.h"
 #include "esp_timer.h"
-#include "usb_hid.h"
-#include "hid_keys.h"
 #include "mmc.h"
 
 class OSystem_esp32 : public ModularMixerBackend, public ModularGraphicsBackend, Common::EventSource {
@@ -80,16 +84,15 @@ protected:
 private:
 	timeval _startTime;
 	bool _silenceLogs;
-	int _was_touched;
-	bool _mousedown_queued;
-	Common::Point _last_mouse_pos;
-	int64_t _last_ts_time_us;
+	Common::Point _mousePos;
+	int64_t _last_input_poll_us;
 };
 
 OSystem_esp32::OSystem_esp32(bool silenceLogs) :
 	_silenceLogs(silenceLogs) {
 	_fsFactory = new POSIXESPFilesystemFactory();
-	_last_ts_time_us = 0;
+	_last_input_poll_us = 0;
+	_mousePos = Common::Point(0, 0);
 }
 
 OSystem_esp32::~OSystem_esp32() {
@@ -112,151 +115,186 @@ void OSystem_esp32::initBackend() {
 	ConfMan.registerDefault("iconspath", Common::Path("/sdcard/scummvm/icons/"));
 	ConfMan.registerDefault("pluginspath", Common::Path("/sdcard/scummvm/plugins/"));
 	ConfMan.registerDefault("savepath", Common::Path("/sdcard/scummvm/saves/"));
-	ConfMan.registerDefault("themepath", Common::Path("/sdcard/scummvm/themes/"));
+	ConfMan.registerDefault("themepath", Common::Path("/sdcard/scummvm/"));
+	// Pin the GUI theme to one we actually ship in SPIFFS, so ScummVM
+	// doesn't fall back to its built-in theme — that one is too tall
+	// for our 320x240 panel and pushes dialog buttons off the bottom.
+	ConfMan.registerDefault("gui_theme", "scummmodern");
+	ConfMan.registerDefault("gui_renderer", "normal");
+	// Open the file browser at the games directory by default so the
+	// user doesn't have to navigate from / through SPIFFS' minimal
+	// directory listing.
+	ConfMan.registerDefault("browser_lastpath", "/sdcard/games");
 
 	BaseBackend::initBackend();
+
+	// Pre-add (or overwrite) the bundled MI1 EGA demo so the launcher
+	// shows it without needing the file browser. Always overwrites in
+	// case a stale config from an earlier boot points at a missing path.
+	{
+		const char *gameDomain = "monkey-demo";
+		const char *gamePath = "/sdcard/games/monkey1";
+		struct stat st;
+		if (stat("/sdcard/games/monkey1/000.lfl", &st) == 0) {
+			if (ConfMan.hasGameDomain(gameDomain)) {
+				ConfMan.removeGameDomain(gameDomain);
+			}
+			ConfMan.addGameDomain(gameDomain);
+			ConfMan.set("engineid",    "scumm",                       gameDomain);
+			ConfMan.set("gameid",      "monkey",                      gameDomain);
+			ConfMan.set("description", "Monkey Island 1 (EGA Demo)",  gameDomain);
+			ConfMan.set("path",        gamePath,                       gameDomain);
+			ConfMan.set("platform",    "pc",                           gameDomain);
+			ConfMan.set("language",    "en",                           gameDomain);
+			ConfMan.set("extra",       "Demo",                         gameDomain);
+			ConfMan.set("guioptions",  "lang_English sndNoSpeech",     gameDomain);
+			ConfMan.flushToDisk();
+			ESP_LOGI(TAG, "Pre-registered Monkey Island 1 EGA demo at %s", gamePath);
+		} else {
+			ESP_LOGW(TAG, "MI1 demo data not found at %s", gamePath);
+		}
+	}
 }
 
-//missing codes: backspace, enter (instead of return)
-static int keymap[][3] = {
-	{ KEY_ENTER, Common::KEYCODE_RETURN, Common::ASCII_RETURN },
-	{ KEY_UP, Common::KEYCODE_UP, 0 },
-	{ KEY_DOWN, Common::KEYCODE_DOWN, 0 },
-	{ KEY_LEFT, Common::KEYCODE_LEFT, 0 },
-	{ KEY_RIGHT, Common::KEYCODE_RIGHT, 0 },
-	{ KEY_LEFTSHIFT, Common::KEYCODE_LSHIFT, 0 },
-	{ KEY_RIGHTSHIFT, Common::KEYCODE_RSHIFT, 0 },
-	{ KEY_LEFTCTRL, Common::KEYCODE_LCTRL, 0 },
-	{ KEY_RIGHTCTRL, Common::KEYCODE_RCTRL, 0 },
-	{ KEY_LEFTALT, Common::KEYCODE_LALT, 0 },
-	{ KEY_RIGHTALT, Common::KEYCODE_RALT, 0 },
-	{ KEY_LEFTMETA, Common::KEYCODE_LMETA, 0 },
-	{ KEY_RIGHTMETA, Common::KEYCODE_RMETA, 0 },
-	{ KEY_KP0, Common::KEYCODE_KP0, '0' },
-	{ KEY_KP1, Common::KEYCODE_KP1, '1' },
-	{ KEY_KP2, Common::KEYCODE_KP2, '2' },
-	{ KEY_KP3, Common::KEYCODE_KP3, '3' },
-	{ KEY_KP4, Common::KEYCODE_KP4, '4' },
-	{ KEY_KP5, Common::KEYCODE_KP5, '5' },
-	{ KEY_KP6, Common::KEYCODE_KP6, '6' },
-	{ KEY_KP7, Common::KEYCODE_KP7, '7' },
-	{ KEY_KP8, Common::KEYCODE_KP8, '8' },
-	{ KEY_KP9, Common::KEYCODE_KP9, '9' },
-	{ KEY_HOME, Common::KEYCODE_HOME, 0 },
-	{ KEY_INSERT, Common::KEYCODE_INSERT, 0 },
-	{ KEY_END, Common::KEYCODE_END, 0 },
-	{ KEY_PAGEUP, Common::KEYCODE_PAGEUP, 0 },
-	{ KEY_PAGEDOWN, Common::KEYCODE_PAGEDOWN, 0 },
-	{ KEY_F1, Common::KEYCODE_F1, Common::ASCII_F1 },
-	{ KEY_F2, Common::KEYCODE_F2, Common::ASCII_F2 },
-	{ KEY_F3, Common::KEYCODE_F3, Common::ASCII_F3 },
-	{ KEY_F4, Common::KEYCODE_F4, Common::ASCII_F4 },
-	{ KEY_F5, Common::KEYCODE_F5, Common::ASCII_F5 },
-	{ KEY_F6, Common::KEYCODE_F6, Common::ASCII_F6 },
-	{ KEY_F7, Common::KEYCODE_F7, Common::ASCII_F7 },
-	{ KEY_F8, Common::KEYCODE_F8, Common::ASCII_F8 },
-	{ KEY_F9, Common::KEYCODE_F9, Common::ASCII_F9 },
-	{ KEY_F10, Common::KEYCODE_F10, Common::ASCII_F10 },
-	{ KEY_F11, Common::KEYCODE_F11, Common::ASCII_F11 },
-	{ KEY_F12, Common::KEYCODE_F12, Common::ASCII_F12 },
-	{ KEY_F13, Common::KEYCODE_F13, 0 },
-	{ KEY_F14, Common::KEYCODE_F14, 0 },
-	{ KEY_F15, Common::KEYCODE_F15, 0 },
-	{ KEY_A, Common::KEYCODE_a, 'a' },
-	{ KEY_B, Common::KEYCODE_b, 'b' },
-	{ KEY_C, Common::KEYCODE_c, 'c' },
-	{ KEY_D, Common::KEYCODE_d, 'd' },
-	{ KEY_E, Common::KEYCODE_e, 'e' },
-	{ KEY_F, Common::KEYCODE_f, 'f' },
-	{ KEY_G, Common::KEYCODE_g, 'g' },
-	{ KEY_H, Common::KEYCODE_h, 'h' },
-	{ KEY_I, Common::KEYCODE_i, 'i' },
-	{ KEY_J, Common::KEYCODE_j, 'j' },
-	{ KEY_K, Common::KEYCODE_k, 'k' },
-	{ KEY_L, Common::KEYCODE_l, 'l' },
-	{ KEY_M, Common::KEYCODE_m, 'm' },
-	{ KEY_N, Common::KEYCODE_n, 'n' },
-	{ KEY_O, Common::KEYCODE_o, 'o' },
-	{ KEY_P, Common::KEYCODE_p, 'p' },
-	{ KEY_Q, Common::KEYCODE_q, 'q' },
-	{ KEY_R, Common::KEYCODE_r, 'r' },
-	{ KEY_S, Common::KEYCODE_s, 's' },
-	{ KEY_T, Common::KEYCODE_t, 't' },
-	{ KEY_U, Common::KEYCODE_u, 'u' },
-	{ KEY_V, Common::KEYCODE_v, 'v' },
-	{ KEY_W, Common::KEYCODE_w, 'w' },
-	{ KEY_X, Common::KEYCODE_x, 'x' },
-	{ KEY_Y, Common::KEYCODE_y, 'y' },
-	{ KEY_Z, Common::KEYCODE_z, 'z' },
-	{ KEY_ESC, Common::KEYCODE_ESCAPE, Common::ASCII_ESCAPE},
-	{ KEY_COMMA, Common::KEYCODE_COMMA, ',' },
-	{ KEY_DOT, Common::KEYCODE_PERIOD, '.' },
-	{ KEY_TAB, Common::KEYCODE_TAB, '\t' },
-	{ KEY_SPACE, Common::KEYCODE_SPACE, ' ' },
-	{ KEY_BACKSPACE, Common::KEYCODE_BACKSPACE, 0 },
-	{ KEY_GRAVE, Common::KEYCODE_BACKQUOTE, '`' },
-	{ KEY_MINUS, Common::KEYCODE_MINUS, '-' },
-	{ KEY_EQUAL, Common::KEYCODE_EQUALS, '=' },
-	{ KEY_LEFTBRACE, Common::KEYCODE_LEFTPAREN, '}' },
-	{ KEY_RIGHTBRACE, Common::KEYCODE_RIGHTPAREN, '{' },
-	{ KEY_BACKSLASH, Common::KEYCODE_BACKSLASH, '\\' },
-	{ KEY_SEMICOLON, Common::KEYCODE_SEMICOLON, ';' },
-	{ KEY_APOSTROPHE, Common::KEYCODE_QUOTE, '\'' },
-	{ KEY_SLASH, Common::KEYCODE_SLASH, '/' },
-	{ KEY_DELETE, Common::KEYCODE_DELETE, 0 },
-	{ 0, 0, 0 }
-};
-
+// Map the BBQ10 raw byte (mostly ASCII) to a (KeyCode, ascii) pair.
+// The BBQ10 firmware reports ASCII for letters/digits/punctuation, and
+// a handful of dedicated codes for the control keys. The numbers here
+// match the arturo182 keyboard firmware used by the T-Deck.
+//
+// Special keys:
+//   0x08 = backspace, 0x0a/0x0d = enter, 0x1b = escape, ' '   = space
+//   0x81..0x84 = left/up/right/down, 0x06 = sym, 0x11/0x12 = shift/alt
+//   0x03 = speaker (mapped to F5 = save), 0x05 = mic (F7 = load menu)
+static void mapBbq10(uint8_t raw, Common::KeyCode &kc, uint16 &ascii) {
+	kc = Common::KEYCODE_INVALID;
+	ascii = 0;
+	if (raw >= 'a' && raw <= 'z') {
+		kc = (Common::KeyCode)(Common::KEYCODE_a + (raw - 'a'));
+		ascii = raw;
+		return;
+	}
+	if (raw >= 'A' && raw <= 'Z') {
+		kc = (Common::KeyCode)(Common::KEYCODE_a + (raw - 'A'));
+		ascii = raw;
+		return;
+	}
+	if (raw >= '0' && raw <= '9') {
+		kc = (Common::KeyCode)(Common::KEYCODE_0 + (raw - '0'));
+		ascii = raw;
+		return;
+	}
+	switch (raw) {
+	case 0x08: kc = Common::KEYCODE_BACKSPACE; ascii = Common::ASCII_BACKSPACE; return;
+	case 0x0a:
+	case 0x0d: kc = Common::KEYCODE_RETURN; ascii = Common::ASCII_RETURN; return;
+	case 0x1b: kc = Common::KEYCODE_ESCAPE; ascii = Common::ASCII_ESCAPE; return;
+	case ' ':  kc = Common::KEYCODE_SPACE; ascii = ' '; return;
+	case '.':  kc = Common::KEYCODE_PERIOD; ascii = '.'; return;
+	case ',':  kc = Common::KEYCODE_COMMA; ascii = ','; return;
+	case '?':  kc = Common::KEYCODE_SLASH; ascii = '?'; return;
+	case '!':  kc = Common::KEYCODE_1; ascii = '!'; return;
+	case '@':  kc = Common::KEYCODE_2; ascii = '@'; return;
+	case '#':  kc = Common::KEYCODE_3; ascii = '#'; return;
+	case '$':  kc = Common::KEYCODE_4; ascii = '$'; return;
+	case '%':  kc = Common::KEYCODE_5; ascii = '%'; return;
+	case '^':  kc = Common::KEYCODE_6; ascii = '^'; return;
+	case '&':  kc = Common::KEYCODE_7; ascii = '&'; return;
+	case '*':  kc = Common::KEYCODE_8; ascii = '*'; return;
+	case '(':  kc = Common::KEYCODE_9; ascii = '('; return;
+	case ')':  kc = Common::KEYCODE_0; ascii = ')'; return;
+	case '-':  kc = Common::KEYCODE_MINUS; ascii = '-'; return;
+	case '_':  kc = Common::KEYCODE_UNDERSCORE; ascii = '_'; return;
+	case '=':  kc = Common::KEYCODE_EQUALS; ascii = '='; return;
+	case '+':  kc = Common::KEYCODE_PLUS; ascii = '+'; return;
+	case '/':  kc = Common::KEYCODE_SLASH; ascii = '/'; return;
+	case '\\': kc = Common::KEYCODE_BACKSLASH; ascii = '\\'; return;
+	case '\'': kc = Common::KEYCODE_QUOTE; ascii = '\''; return;
+	case '"':  kc = Common::KEYCODE_QUOTEDBL; ascii = '"'; return;
+	case ':':  kc = Common::KEYCODE_COLON; ascii = ':'; return;
+	case ';':  kc = Common::KEYCODE_SEMICOLON; ascii = ';'; return;
+	// Arrow keys (BBQ10 reports the printable glyphs on these buttons)
+	case 0x81: kc = Common::KEYCODE_LEFT; return;
+	case 0x82: kc = Common::KEYCODE_UP; return;
+	case 0x83: kc = Common::KEYCODE_DOWN; return;
+	case 0x84: kc = Common::KEYCODE_RIGHT; return;
+	// Dedicated shortcut keys on the T-Deck
+	case 0x03: kc = Common::KEYCODE_F5; ascii = Common::ASCII_F5; return; // speaker -> save menu
+	case 0x05: kc = Common::KEYCODE_F7; ascii = Common::ASCII_F7; return; // mic     -> load menu
+	case 0x06: kc = Common::KEYCODE_LALT; return;                        // sym     -> alt
+	case 0x11: kc = Common::KEYCODE_LSHIFT; return;
+	case 0x12: kc = Common::KEYCODE_LALT; return;
+	default: return;
+	}
+}
 
 bool OSystem_esp32::pollEvent(Common::Event &event) {
 	((DefaultTimerManager *)getTimerManager())->checkTimers();
 
-	event.type=Common::EVENT_INVALID;
-	if (_mousedown_queued) {
-		event.type = Common::EVENT_LBUTTONDOWN;
-		_mousedown_queued=false;
-		return true;
+	event.type = Common::EVENT_INVALID;
+
+	// 1. Drain the BBQ10 keyboard queue first so typing feels responsive.
+	tdeck_kbd_event_t k;
+	if (tdeck_kbd_poll(&k)) {
+		Common::KeyCode kc;
+		uint16 ascii;
+		mapBbq10(k.raw, kc, ascii);
+		if (kc != Common::KEYCODE_INVALID) {
+			event.type = k.pressed ? Common::EVENT_KEYDOWN : Common::EVENT_KEYUP;
+			event.kbd.keycode = kc;
+			event.kbd.ascii = ascii;
+			event.kbd.flags = 0;
+			return true;
+		}
 	}
 
-	if ((esp_timer_get_time()-_last_ts_time_us)>(1000000/60)) {
-		_last_ts_time_us=esp_timer_get_time();
-		Common::Point pos;
-		EspGraphicsManager *gfx=(EspGraphicsManager *)_graphicsManager;
-		int touched=gfx->getTouch(pos);
-		if (touched==1) {
-			if (_was_touched==0) _mousedown_queued=true;
-//			ESP_LOGI(TAG, "ts %d,%d", pos.x, pos.y);
-			event.type = Common::EVENT_MOUSEMOVE;
-			event.mouse = pos;
-			_last_mouse_pos = pos;
-		} else if (touched==0 && _was_touched==1) {
-//			ESP_LOGI(TAG, "ts up");
+	// 2. Trackball: poll at most every 1/60 s so we don't spam EVENT_MOUSEMOVE.
+	if ((esp_timer_get_time() - _last_input_poll_us) > (1000000 / 60)) {
+		_last_input_poll_us = esp_timer_get_time();
+		tdeck_trackball_state_t tb;
+		tdeck_trackball_poll(&tb);
+
+		// Click edges take precedence so a tap isn't swallowed.
+		if (tb.click_down == 1) {
+			event.type = Common::EVENT_LBUTTONDOWN;
+			event.mouse = _mousePos;
+			return true;
+		}
+		if (tb.click_down == -1) {
 			event.type = Common::EVENT_LBUTTONUP;
-			event.mouse = _last_mouse_pos;
-		} else if (touched==2 && _was_touched!=2) {
-			event.type = Common::EVENT_VIRTUAL_KEYBOARD;
+			event.mouse = _mousePos;
+			return true;
 		}
-		_was_touched=touched;
-		if (event.type!=Common::EVENT_INVALID) return true;
+
+		if (tb.dx != 0 || tb.dy != 0) {
+			int newX = _mousePos.x + tb.dx;
+			int newY = _mousePos.y + tb.dy;
+			int maxX = 0, maxY = 0;
+			if (_graphicsManager && _graphicsManager->isOverlayVisible()) {
+				maxX = _graphicsManager->getOverlayWidth() - 1;
+				maxY = _graphicsManager->getOverlayHeight() - 1;
+			} else if (_graphicsManager && _graphicsManager->getWidth() > 0) {
+				maxX = _graphicsManager->getWidth() - 1;
+				maxY = _graphicsManager->getHeight() - 1;
+			} else if (_graphicsManager) {
+				maxX = _graphicsManager->getOverlayWidth() - 1;
+				maxY = _graphicsManager->getOverlayHeight() - 1;
+			}
+			if (newX < 0) newX = 0;
+			if (newY < 0) newY = 0;
+			if (newX > maxX) newX = maxX;
+			if (newY > maxY) newY = maxY;
+			_mousePos = Common::Point(newX, newY);
+			event.type = Common::EVENT_MOUSEMOVE;
+			event.mouse = _mousePos;
+			// Keep the graphics manager's software cursor in sync so
+			// updateScreen draws it at the right spot.
+			if (_graphicsManager) {
+				_graphicsManager->warpMouse(newX, newY);
+			}
+			return true;
+		}
 	}
 
-	hid_ev_t ev;
-	if (usb_hid_receive_hid_event(&ev)) {
-		if (ev.type==HIDEV_EVENT_KEY_DOWN || ev.type==HIDEV_EVENT_KEY_UP) {
-			if (ev.type==HIDEV_EVENT_KEY_DOWN) event.type=Common::EVENT_KEYDOWN;
-			if (ev.type==HIDEV_EVENT_KEY_UP) event.type=Common::EVENT_KEYUP;
-			int i = 0;
-			while (keymap[i][0] != 0) {
-				if (keymap[i][0] == ev.key.keycode) {
-					event.kbd.keycode = static_cast<Common::KeyCode>(keymap[i][1]);
-					event.kbd.ascii = keymap[i][2];
-					//event.kbd.flags |= Common::KBD_SHIFT; _CTRL; _ALT;
-					return true;
-				}
-				i++;
-			}
-		}
-	}
 	return false;
 }
 
@@ -333,24 +371,34 @@ void main_task(void *param) {
 	g_system->destroy();
 }
 
-void usbhidTaskStub(void *param) {
-	usb_hid_task();
-}
-
-
 int app_main() {
-//	bsp_sdcard_mount();
+	tdeck_board_init();
+
+	// Reserve the two internal-RAM-only allocations up front before
+	// anything else can fragment or consume the internal heap:
+	//   * 150 KB DMA-capable panel framebuffer for the LCD
+	//   * 64 KB main task stack (must be internal because flash/SPIFFS
+	//     operations disable the PSRAM cache while they run)
+	// Both together fit in the ~243 KB usable internal SRAM only if
+	// they get first dibs on the heap.
+	EspGraphicsManager::preallocatePanelFb();
+
+	const int stack_depth = 64 * 1024;
+	StaticTask_t *taskbuf = (StaticTask_t *)heap_caps_calloc(
+		1, sizeof(StaticTask_t), MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+	uint8_t *stackbuf = (uint8_t *)heap_caps_calloc(
+		stack_depth, 1, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+	assert(taskbuf && stackbuf);
+
+	tdeck_kbd_init();
+	tdeck_trackball_init();
 	sdcard_mount_blkcache("/sdcard", 15);
 
 	g_system = OSystem_esp32_create(false);
 	assert(g_system);
 
-	xTaskCreatePinnedToCore(usbhidTaskStub, "usbhid", 4096, NULL, 7, NULL, 1);
-
-	int stack_depth=512*1024;
-	StaticTask_t *taskbuf=(StaticTask_t*)calloc(1, sizeof(StaticTask_t));
-	uint8_t *stackbuf=(uint8_t*)calloc(stack_depth, 1);
-	xTaskCreateStaticPinnedToCore(main_task, "main", stack_depth, NULL, 2, (StackType_t*)stackbuf, taskbuf, 0);
+	xTaskCreateStaticPinnedToCore(main_task, "main", stack_depth, NULL, 2,
+	                              (StackType_t *)stackbuf, taskbuf, 0);
 	return 0;
 }
 

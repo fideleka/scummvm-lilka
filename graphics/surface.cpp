@@ -19,6 +19,10 @@
  *
  */
 
+#if defined(ESP_PLATFORM)
+#define FORBIDDEN_SYMBOL_ALLOW_ALL
+#endif
+
 #include "common/algorithm.h"
 #include "common/endian.h"
 #include "common/memory.h"
@@ -66,6 +70,18 @@ void Surface::drawThickLine(int x0, int y0, int x1, int y1, int penX, int penY, 
 
 // see graphics/blit/blit-atari.cpp
 #ifndef ATARI
+
+#if defined(ESP_PLATFORM)
+// On the ESP32-S3 backend, the default heap allocator sometimes refuses
+// to fall back to PSRAM for large surface allocations, so we forward-
+// declare heap_caps_calloc and retry with the SPIRAM cap when calloc()
+// fails. The library build doesn't get ESP-IDF include paths, hence the
+// forward declarations.
+extern "C" void *heap_caps_calloc(size_t n, size_t size, uint32_t caps);
+#define MALLOC_CAP_8BIT     (1 << 2)
+#define MALLOC_CAP_SPIRAM   (1 << 10)
+#endif
+
 void Surface::create(int16 width, int16 height, const PixelFormat &f) {
 	assert(width >= 0 && height >= 0);
 	free();
@@ -77,6 +93,12 @@ void Surface::create(int16 width, int16 height, const PixelFormat &f) {
 
 	if (width && height) {
 		pixels = calloc(width * height, format.bytesPerPixel);
+#if defined(ESP_PLATFORM)
+		if (!pixels) {
+			pixels = heap_caps_calloc(width * height, format.bytesPerPixel,
+			                          MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+		}
+#endif
 		assert(pixels);
 	}
 }
