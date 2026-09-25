@@ -2,9 +2,11 @@
 
 This is an experimental ESP-IDF 5.3.2 build of the `scumm` engine only. It is
 separate from Keira; Keira's `.scummvm` manager lives on its own
-`feature/scummvm-manager` branch. Direct manifest launch is **not implemented
-in this candidate**. The inherited ScummVM launcher is used for the first
-boot/display/input/return proof.
+`feature/scummvm-manager` branch. A matching manager build can pass a
+CRC-protected manifest path through RTC memory. This guest validates the
+manifest and starts the selected SCUMM game with `--auto-detect`, bypassing
+the stock launcher. Direct launch still needs device validation. Opening the
+raw `.bin` without a manifest continues to show the stock launcher.
 
 ## Build and image
 
@@ -70,7 +72,7 @@ Windows Explorer at `D:\Software\scummvm-lilka\backends\platform\esp32\build\scu
 Copy that raw file to the SD card as `scummvm/engines/scumm.bin`.
 Do not run `idf.py flash` on Lilka.
 
-For a hardware check, copy the raw image to the SD card as
+For a raw-image hardware check, copy the raw image to the SD card as
 `/sd/scummvm/engines/scumm.bin`, then open that `.bin` from Keira's File
 Manager. Keira's existing multiboot writer installs it into `app1` and starts
 it. It should display the ScummVM launcher. Hold Select + Start for 1.5
@@ -107,3 +109,10 @@ firmware and no LittleFS partition is used.
 The layout and display orientation need device validation. Do not regard this
 as a game-ready release until the manifest handoff, save/load cycle, and
 rollback are proven on hardware.
+
+For manager launches, the `.scummvm` manifest can remap A/B/C/D/Start/Select
+to `leftClick`, `rightClick`, `enter`, `escape`, `space`, `f5`, `f7`,
+`virtualKeyboard`, or `none`. It can also tune D-pad pointer speed with
+`pointer.slowStep`, `pointer.fastStep`, and `pointer.accelerationMs`. The
+Select + Start return chord is always enabled. The matching Keira branch
+contains a Monkey Island 1 example manifest; no game data is bundled.

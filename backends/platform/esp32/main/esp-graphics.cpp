@@ -142,7 +142,8 @@ static void streamRectToPanel(esp_lcd_panel_handle_t panel,
 }
 
 bool EspGraphicsManager::hasFeature(OSystem::Feature f) const {
-	if (f == OSystem::kFeatureNoQuit) return true;
+	// A managed game should let ScummVM finish, then the guest resets to Keira.
+	if (f == OSystem::kFeatureNoQuit) return false;
 	if (f == OSystem::kFeatureCursorPalette) return true;
 	return false;
 }

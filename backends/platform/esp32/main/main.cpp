@@ -61,10 +61,19 @@
 #include "freertos/semphr.h"
 #include "esp_timer.h"
 #include "mmc.h"
+#include "launch_manifest.h"
+
+static bool s_managedLaunch = false;
+static LilkaButtonAction s_buttonActions[6] = {
+	LilkaButtonAction::LeftClick, LilkaButtonAction::RightClick, LilkaButtonAction::F5,
+	LilkaButtonAction::F7, LilkaButtonAction::Enter, LilkaButtonAction::VirtualKeyboard};
+static int s_pointerSlowStep = 1;
+static int s_pointerFastStep = 4;
+static int s_pointerAccelerationUs = 500000;
 
 // Follow the device-proven Lilka SDK USB detach/PHY handoff. ESP-IDF 5.3's
 // esp_restart_noos_dig() is only linked on ESP32, so S3 uses the ROM system
-// reset call. The guest return still requires device validation.
+// reset call. Select + Start return was confirmed on the first Lilka test.
 [[noreturn]] static void returnToKeira() {
 	CLEAR_PERI_REG_MASK(USB_SERIAL_JTAG_CONF0_REG, USB_SERIAL_JTAG_USB_PAD_ENABLE);
 	vTaskDelay(pdMS_TO_TICKS(2000));
@@ -141,6 +150,8 @@ void OSystem_esp32::initBackend() {
 	ConfMan.registerDefault("browser_lastpath", "/sd/games/scummvm");
 
 	BaseBackend::initBackend();
+	if (s_managedLaunch)
+		ConfMan.setBool("gui_return_to_launcher_at_exit", false, Common::ConfigManager::kTransientDomain);
 
 }
 
@@ -187,24 +198,46 @@ bool OSystem_esp32::pollEvent(Common::Event &event) {
     for (int i = A; i < BUTTON_COUNT; ++i) {
         if (down[i] == s_buttonDown[i]) continue;
         s_buttonDown[i] = down[i];
-        if (i == A || i == B) {
-            event.type = i == A ? (down[i] ? Common::EVENT_LBUTTONDOWN : Common::EVENT_LBUTTONUP)
-                                : (down[i] ? Common::EVENT_RBUTTONDOWN : Common::EVENT_RBUTTONUP);
+        if ((i == START || i == SELECT) && down[START] && down[SELECT]) continue;
+        LilkaButtonAction action = s_buttonActions[i - A];
+        if (action == LilkaButtonAction::None) continue;
+        if (action == LilkaButtonAction::LeftClick || action == LilkaButtonAction::RightClick) {
+            event.type = action == LilkaButtonAction::LeftClick ?
+                (down[i] ? Common::EVENT_LBUTTONDOWN : Common::EVENT_LBUTTONUP) :
+                (down[i] ? Common::EVENT_RBUTTONDOWN : Common::EVENT_RBUTTONUP);
             event.mouse = _mousePos;
             return true;
         }
-        if (i == SELECT) {
-            if (down[i] && !down[START]) {
+        if (action == LilkaButtonAction::VirtualKeyboard) {
+            if (down[i]) {
                 event.type = Common::EVENT_VIRTUAL_KEYBOARD;
                 return true;
             }
             continue;
         }
         event.type = down[i] ? Common::EVENT_KEYDOWN : Common::EVENT_KEYUP;
-        event.kbd.keycode = i == C ? Common::KEYCODE_F5 :
-                            i == D ? Common::KEYCODE_F7 : Common::KEYCODE_RETURN;
-        event.kbd.ascii = i == C ? Common::ASCII_F5 :
-                          i == D ? Common::ASCII_F7 : Common::ASCII_RETURN;
+        switch (action) {
+        case LilkaButtonAction::Escape:
+            event.kbd.keycode = Common::KEYCODE_ESCAPE;
+            event.kbd.ascii = Common::ASCII_ESCAPE;
+            break;
+        case LilkaButtonAction::Space:
+            event.kbd.keycode = Common::KEYCODE_SPACE;
+            event.kbd.ascii = Common::ASCII_SPACE;
+            break;
+        case LilkaButtonAction::F5:
+            event.kbd.keycode = Common::KEYCODE_F5;
+            event.kbd.ascii = Common::ASCII_F5;
+            break;
+        case LilkaButtonAction::F7:
+            event.kbd.keycode = Common::KEYCODE_F7;
+            event.kbd.ascii = Common::ASCII_F7;
+            break;
+        default:
+            event.kbd.keycode = Common::KEYCODE_RETURN;
+            event.kbd.ascii = Common::ASCII_RETURN;
+            break;
+        }
         event.kbd.flags = 0;
         return true;
     }
@@ -218,7 +251,7 @@ bool OSystem_esp32::pollEvent(Common::Event &event) {
         return false;
     }
     if (!s_directionSinceUs) s_directionSinceUs = now;
-    const int step = now - s_directionSinceUs > 500000 ? 4 : 1;
+    const int step = now - s_directionSinceUs > s_pointerAccelerationUs ? s_pointerFastStep : s_pointerSlowStep;
     const int maxX = _graphicsManager->isOverlayVisible() ?
         _graphicsManager->getOverlayWidth() - 1 : _graphicsManager->getWidth() - 1;
     const int maxY = _graphicsManager->isOverlayVisible() ?
@@ -298,10 +331,36 @@ OSystem *OSystem_esp32_create(bool silenceLogs) {
 extern "C" {
 
 void main_task(void *param) {
-	// Invoke the actual ScummVM main entry point:
-//	const char *argv[]={"scummvm", "-d", "11"};
-	const char *argv[]={"scummvm"};
-	int res = scummvm_main(sizeof(argv)/sizeof(argv[0]), argv);
+	LilkaLaunchGame game;
+	LilkaLaunchStatus launch = lilkaReadLaunchGame(game);
+	if (launch == LilkaLaunchStatus::Invalid) returnToKeira();
+	Common::String pathArg;
+	Common::String gameArg;
+	Common::String languageArg;
+	Common::String platformArg;
+	const char *argv[6] = {"scummvm"};
+	int argc = 1;
+	if (launch == LilkaLaunchStatus::Valid) {
+		s_managedLaunch = true;
+		for (int i = 0; i < 6; ++i) s_buttonActions[i] = game.buttons[i];
+		s_pointerSlowStep = game.slowStep;
+		s_pointerFastStep = game.fastStep;
+		s_pointerAccelerationUs = game.accelerationMs * 1000;
+		pathArg = "--path=" + game.path;
+		gameArg = "--game=" + game.gameId;
+		argv[argc++] = pathArg.c_str();
+		argv[argc++] = gameArg.c_str();
+		if (!game.language.empty()) {
+			languageArg = "--language=" + game.language;
+			argv[argc++] = languageArg.c_str();
+		}
+		if (!game.platform.empty()) {
+			platformArg = "--platform=" + game.platform;
+			argv[argc++] = platformArg.c_str();
+		}
+		argv[argc++] = "--auto-detect";
+	}
+	int res = scummvm_main(argc, argv);
 	ESP_LOGW(TAG, "Scummvm_main done");
 	g_system->destroy();
 	returnToKeira();

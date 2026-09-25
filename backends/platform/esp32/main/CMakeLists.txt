@@ -1,6 +1,7 @@
 idf_component_register(
 	SRCS
 		"main.cpp"
+		"launch_manifest.cpp"
 		"esp-graphics.cpp"
 		"esp-mixer.cpp"
 		"posixesp-fs-factory.cpp"
@@ -14,6 +15,7 @@ idf_component_register(
 		esp_driver_sdspi
 		esp_driver_spi
 		esp_lcd
+		esp_hw_support
 		esp_timer
 		fatfs
 		sdmmc
