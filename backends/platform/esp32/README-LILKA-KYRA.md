@@ -19,6 +19,8 @@ Do not flash the T-Deck merged image or the partition table to Lilka.
 
 Copy the image to `/sd/scummvm/engines/kyra.bin`. Also copy
 `dists/engine-data/kyra.dat` to `/sd/scummvm/data/engine-data/kyra.dat`.
+The guest also accepts `kyra.dat` beside `kyra.bin` under
+`/sd/scummvm/engines/`; the shared engine-data folder takes precedence.
 Place your own compatible game files and a `.scummvm` manifest in a game
 folder. The Keira example is `docs/examples/legend-of-kyrandia.scummvm` on
 its `feature/scummvm-manager` branch. Its `engine: "kyra"` field selects

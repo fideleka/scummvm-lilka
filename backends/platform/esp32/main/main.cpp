@@ -328,6 +328,10 @@ void OSystem_esp32::logMessage(LogMessageType::Type type, const char *message) {
 
 void OSystem_esp32::addSysArchivesToSearchSet(Common::SearchSet &s, int priority) {
 	s.add("engine-data", new Common::FSDirectory("/sd/scummvm/data/engine-data/", 4), priority);
+#ifdef LILKA_ENGINE_KYRA
+	// Accept kyra.dat beside kyra.bin as a fallback; the shared data folder wins.
+	s.add("kyra-image-data", new Common::FSDirectory("/sd/scummvm/engines/", 4), priority - 1);
+#endif
 	s.add("gui/themes", new Common::FSDirectory("/sd/scummvm/data/themes/", 4), priority);
 }
 
