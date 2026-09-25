@@ -118,12 +118,17 @@ serial panic/backtrace to distinguish that case from a main-loop hang.
 The captured panic was an ESP-IDF SPI HAL assertion during the block-cache
 worker's SD preread. LCD and SD share SPI2; this candidate serializes complete
 LCD DMA batches with physical SD reads/writes using one bus mutex. It builds,
-but its crash fix and effect on display/audio timing still require a Lilka
-device retest.
+and the first Lilka retest reached Maniac Mansion gameplay. Physical C opened
+the save/load menu, saving/loading worked in-game, and Select + Start returned
+to Keira. Save persistence across a restart, normal game-quit return, and
+longer display/audio testing remain open.
 
 For manager launches, the `.scummvm` manifest can remap A/B/C/D/Start/Select
 to `leftClick`, `rightClick`, `enter`, `escape`, `space`, `f5`, `f7`,
 `virtualKeyboard`, or `none`. It can also tune D-pad pointer speed with
 `pointer.slowStep`, `pointer.fastStep`, and `pointer.accelerationMs`. The
 Select + Start return chord is always enabled. The matching Keira branch
-contains a Monkey Island 1 example manifest; no game data is bundled.
+contains Maniac Mansion and Monkey Island 1 example manifests; no game data is
+bundled. In the Maniac example, C sends F5 for Save/Load and D sends Escape.
+Select requests the virtual keyboard, which requires a separate support pack
+on SD and was unavailable in the first test.
