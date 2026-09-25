@@ -8,9 +8,13 @@ boot/display/input/return proof.
 
 ## Build and image
 
-From this directory with ESP-IDF 5.3.2 active, run `idf.py build`. The **raw
-application image** is `build/scummvm.bin`. Do not flash the T-Deck merged
-image, bootloader, partition table, or OTA data onto Lilka. The binary must
+From the repository root, run `./compile-lilka.sh`. It loads ESP-IDF 5.3.2 from
+the sibling `../esp/esp-idf` directory (or from `IDF_PATH` if set), requires
+`cmake` and `ninja` on `PATH`, builds the project, and checks the image size.
+It does not flash the device. Alternatively, from this directory with
+ESP-IDF 5.3.2 already active, run `idf.py build`. The **raw application image**
+is `build/scummvm.bin`. Do not flash the T-Deck merged image, bootloader,
+partition table, or OTA data onto Lilka. The binary must
 remain at or below `0x640000` bytes to fit Keira's `app1` OTA slot. This
 project's `partitions.csv` mirrors Keira v2's `default_16MB.csv` for size
 checking; it is not a request to replace the device's partition table.
