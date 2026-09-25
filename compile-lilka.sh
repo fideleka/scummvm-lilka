@@ -55,7 +55,7 @@ echo "Size: $image_bytes / $slot_bytes bytes (free: $((slot_bytes - image_bytes)
 
 windows_copy_dir="/mnt/d/Software/scummvm-lilka"
 if [[ -d "$windows_copy_dir" ]]; then
-    windows_copy="$windows_copy_dir/scummvm.bin"
+    windows_copy="$windows_copy_dir/scumm.bin"
     cp -f "$image" "$windows_copy"
     echo "Windows copy: $windows_copy"
 fi

@@ -30,7 +30,7 @@ Clone from within WSL so build scripts
 retain Unix line endings. The same `compile-lilka.sh` works there, including
 its size check; no Windows-specific firmware image is needed.
 After a successful build, the script also replaces
-`/mnt/d/Software/scummvm-lilka/scummvm.bin` when that directory exists. The
+`/mnt/d/Software/scummvm-lilka/scumm.bin` when that directory exists. The
 original image remains in the WSL checkout at
 `backends/platform/esp32/build/scummvm.bin`.
 
