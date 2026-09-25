@@ -23,9 +23,12 @@ checking; it is not a request to replace the device's partition table.
 
 This fork's ScummVM component invokes POSIX `export`, `./configure`, and
 `make` during the build. A native Windows PowerShell or Command Prompt build
-is therefore not supported. Use Ubuntu in WSL2, with the repositories on the
-WSL Linux filesystem (not under `/mnt/c`). The same `compile-lilka.sh` works
-there, including its size check; no Windows-specific firmware image is needed.
+is therefore not supported. Use Ubuntu in WSL2. A WSL-native checkout is
+fastest; `/mnt/d/Software` can be used as a project root, though this path has
+not yet been device/build tested and Windows-mounted drives can be slower.
+Clone from within WSL so build scripts
+retain Unix line endings. The same `compile-lilka.sh` works there, including
+its size check; no Windows-specific firmware image is needed.
 
 In an **administrator PowerShell** window, install WSL if it is not already
 available, then restart Windows if prompted:
@@ -40,22 +43,27 @@ feature branch:
 ```bash
 sudo apt update
 sudo apt install -y git wget flex bison gperf python3 python3-pip python3-venv cmake ninja-build ccache libffi-dev libssl-dev dfu-util libusb-1.0-0 build-essential
-mkdir -p ~/Projects/esp
-git clone --recursive --branch v5.3.2 https://github.com/espressif/esp-idf.git ~/Projects/esp/esp-idf
-cd ~/Projects/esp/esp-idf
+mkdir -p /mnt/d/Software/esp
+git clone --recursive --branch v5.3.2 https://github.com/espressif/esp-idf.git /mnt/d/Software/esp/esp-idf
+cd /mnt/d/Software/esp/esp-idf
 ./install.sh esp32s3
-git clone --branch feature/lilka-scumm-only https://github.com/fideleka/scummvm-lilka.git ~/Projects/scummvm-lilka
-cd ~/Projects/scummvm-lilka
+git clone --branch feature/lilka-scumm-only https://github.com/fideleka/scummvm-lilka.git /mnt/d/Software/scummvm-lilka
+cd /mnt/d/Software/scummvm-lilka
 ./compile-lilka.sh
 ```
 
-For subsequent builds, run `cd ~/Projects/scummvm-lilka`, update the branch
-with `git pull --ff-only` if desired, then run `./compile-lilka.sh` again.
+If `scummvm-lilka` is already checked out at `/mnt/d/Software`, skip its clone
+command, then run `git fetch origin`, `git switch feature/lilka-scumm-only`,
+and `git pull --ff-only` from that checkout. Do not reuse a Windows ESP-IDF
+Python/toolchain installation inside WSL; `./install.sh esp32s3` must run in
+Ubuntu. For subsequent builds, run `cd /mnt/d/Software/scummvm-lilka`, update
+the branch with `git pull --ff-only` if desired, then run
+`./compile-lilka.sh` again.
 If ESP-IDF is installed elsewhere within WSL, set `IDF_PATH` to that path
 before running the script. The output is
-`backends/platform/esp32/build/scummvm.bin` inside the WSL checkout. From
-Windows Explorer, open `\\wsl$\Ubuntu\home\<your-WSL-user>\Projects\scummvm-lilka`
-to copy that raw file to the SD card as `scummvm/engines/scumm.bin`.
+`backends/platform/esp32/build/scummvm.bin` inside the checkout, visible in
+Windows Explorer at `D:\Software\scummvm-lilka\backends\platform\esp32\build\scummvm.bin`.
+Copy that raw file to the SD card as `scummvm/engines/scumm.bin`.
 Do not run `idf.py flash` on Lilka.
 
 For the first hardware check, copy the raw image to the SD card as
