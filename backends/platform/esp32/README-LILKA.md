@@ -70,12 +70,16 @@ Windows Explorer at `D:\Software\scummvm-lilka\backends\platform\esp32\build\scu
 Copy that raw file to the SD card as `scummvm/engines/scumm.bin`.
 Do not run `idf.py flash` on Lilka.
 
-For the first hardware check, copy the raw image to the SD card as
+For a hardware check, copy the raw image to the SD card as
 `/sd/scummvm/engines/scumm.bin`, then open that `.bin` from Keira's File
 Manager. Keira's existing multiboot writer installs it into `app1` and starts
 it. It should display the ScummVM launcher. Hold Select + Start for 1.5
 seconds to return to Keira. Check that Keira, Start-alone input, and PC COM
-all recover. These checks have not yet been performed on a Lilka device.
+all recover. The first Lilka test reached the ScummVM launcher but found the
+display upside down. The panel orientation has since been corrected; the new
+image still needs a device retest. The stock launcher remains too small for
+comfortable use on Lilka and is only a temporary bring-up interface until
+Keira's direct-launch manager and the guest handoff are implemented.
 
 ## SD card
 

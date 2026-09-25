@@ -181,12 +181,11 @@ void EspGraphicsManager::init() {
 	ESP_ERROR_CHECK(esp_lcd_panel_reset(_panel_handle));
 	ESP_ERROR_CHECK(esp_lcd_panel_init(_panel_handle));
 	ESP_ERROR_CHECK(esp_lcd_panel_invert_color(_panel_handle, true));
-	// Landscape: 320x240 with the T-Deck in its natural orientation.
-	// After swap_xy(true), the MX bit of the ST7789 MADCTL register
-	// ends up controlling the visual Y axis and MY controls visual X.
-	// T-Deck v1 needs MX on, MY off.
+	// Lilka v2 uses landscape rotation 3 (SDK config.h). The T-Deck's
+	// opposite landscape orientation rendered the image upside down and
+	// made physical D-pad movement appear reversed on Lilka.
 	ESP_ERROR_CHECK(esp_lcd_panel_swap_xy(_panel_handle, true));
-	ESP_ERROR_CHECK(esp_lcd_panel_mirror(_panel_handle, true, false));
+	ESP_ERROR_CHECK(esp_lcd_panel_mirror(_panel_handle, false, true));
 	// Lilka's 240x280 glass is centred in ST7789 RAM; rotation moves the
 	// 20-pixel row offset to the landscape X axis.
 	ESP_ERROR_CHECK(esp_lcd_panel_set_gap(_panel_handle, 20, 0));
