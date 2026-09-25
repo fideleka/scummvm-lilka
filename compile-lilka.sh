@@ -14,7 +14,7 @@ fi
 
 for tool in cmake ninja; do
     if ! command -v "$tool" >/dev/null 2>&1; then
-        echo "Missing $tool on PATH. On macOS: brew install cmake ninja" >&2
+        echo "Missing $tool on PATH. Install it in the build environment (macOS: brew; Ubuntu/WSL: apt)." >&2
         exit 1
     fi
 done

@@ -16,8 +16,47 @@ ESP-IDF 5.3.2 already active, run `idf.py build`. The **raw application image**
 is `build/scummvm.bin`. Do not flash the T-Deck merged image, bootloader,
 partition table, or OTA data onto Lilka. The binary must
 remain at or below `0x640000` bytes to fit Keira's `app1` OTA slot. This
-project's `partitions.csv` mirrors Keira v2's `default_16MB.csv` for size
+project’s `partitions.csv` mirrors Keira v2's `default_16MB.csv` for size
 checking; it is not a request to replace the device's partition table.
+
+### Building on Windows (WSL2)
+
+This fork's ScummVM component invokes POSIX `export`, `./configure`, and
+`make` during the build. A native Windows PowerShell or Command Prompt build
+is therefore not supported. Use Ubuntu in WSL2, with the repositories on the
+WSL Linux filesystem (not under `/mnt/c`). The same `compile-lilka.sh` works
+there, including its size check; no Windows-specific firmware image is needed.
+
+In an **administrator PowerShell** window, install WSL if it is not already
+available, then restart Windows if prompted:
+
+```powershell
+wsl --install -d Ubuntu
+```
+
+Open the Ubuntu terminal and install the build tools, ESP-IDF 5.3.2, and this
+feature branch:
+
+```bash
+sudo apt update
+sudo apt install -y git wget flex bison gperf python3 python3-pip python3-venv cmake ninja-build ccache libffi-dev libssl-dev dfu-util libusb-1.0-0 build-essential
+mkdir -p ~/Projects/esp
+git clone --recursive --branch v5.3.2 https://github.com/espressif/esp-idf.git ~/Projects/esp/esp-idf
+cd ~/Projects/esp/esp-idf
+./install.sh esp32s3
+git clone --branch feature/lilka-scumm-only https://github.com/fideleka/scummvm-lilka.git ~/Projects/scummvm-lilka
+cd ~/Projects/scummvm-lilka
+./compile-lilka.sh
+```
+
+For subsequent builds, run `cd ~/Projects/scummvm-lilka`, update the branch
+with `git pull --ff-only` if desired, then run `./compile-lilka.sh` again.
+If ESP-IDF is installed elsewhere within WSL, set `IDF_PATH` to that path
+before running the script. The output is
+`backends/platform/esp32/build/scummvm.bin` inside the WSL checkout. From
+Windows Explorer, open `\\wsl$\Ubuntu\home\<your-WSL-user>\Projects\scummvm-lilka`
+to copy that raw file to the SD card as `scummvm/engines/scumm.bin`.
+Do not run `idf.py flash` on Lilka.
 
 For the first hardware check, copy the raw image to the SD card as
 `/sd/scummvm/engines/scumm.bin`, then open that `.bin` from Keira's File
