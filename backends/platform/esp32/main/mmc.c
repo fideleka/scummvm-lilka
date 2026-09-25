@@ -31,6 +31,20 @@ static sdmmc_card_t card;
 static blkcache_handle_t *bc;
 FATFS *fatfs;
 
+static esp_err_t locked_read_sectors(void *arg, void *dst, size_t sector, size_t count) {
+	tdeck_spi_lock();
+	esp_err_t err = sdmmc_read_sectors((sdmmc_card_t *)arg, dst, sector, count);
+	tdeck_spi_unlock();
+	return err;
+}
+
+static esp_err_t locked_write_sectors(void *arg, const void *src, size_t sector, size_t count) {
+	tdeck_spi_lock();
+	esp_err_t err = sdmmc_write_sectors((sdmmc_card_t *)arg, src, sector, count);
+	tdeck_spi_unlock();
+	return err;
+}
+
 static DSTATUS dio_init(unsigned char pdrv)   { return 0; }
 static DSTATUS dio_status(unsigned char pdrv) { return 0; }
 
@@ -92,8 +106,8 @@ void sdcard_mount_blkcache(const char *mountpoint, int files) {
 	blkcache_config_t bcfg = {
 		.blksize = 1024 * 32,
 		.blkcount = 16,
-		.read_sectors_cb = (read_sectors_t)sdmmc_read_sectors,
-		.write_sectors_cb = (write_sectors_t)sdmmc_write_sectors,
+		.read_sectors_cb = locked_read_sectors,
+		.write_sectors_cb = locked_write_sectors,
 		.arg = (void *)&card
 	};
 	blkcache_init(&bcfg, &bc);

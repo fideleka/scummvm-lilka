@@ -115,6 +115,11 @@ The exit chord now has an independent FreeRTOS poll task so a blocked
 ScummVM main loop does not prevent returning to Keira. A CPU panic can still
 stop the scheduler: this build uses the ESP-IDF GDB panic stub, so capture the
 serial panic/backtrace to distinguish that case from a main-loop hang.
+The captured panic was an ESP-IDF SPI HAL assertion during the block-cache
+worker's SD preread. LCD and SD share SPI2; this candidate serializes complete
+LCD DMA batches with physical SD reads/writes using one bus mutex. It builds,
+but its crash fix and effect on display/audio timing still require a Lilka
+device retest.
 
 For manager launches, the `.scummvm` manifest can remap A/B/C/D/Start/Select
 to `leftClick`, `rightClick`, `enter`, `escape`, `space`, `f5`, `f7`,

@@ -26,10 +26,23 @@
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "freertos/semphr.h"
+#include <assert.h>
 
 #define TAG "tdeck_board"
 
 static bool s_inited = false;
+static SemaphoreHandle_t s_spi_mutex;
+
+void tdeck_spi_lock(void) {
+	assert(s_spi_mutex);
+	xSemaphoreTake(s_spi_mutex, portMAX_DELAY);
+}
+
+void tdeck_spi_unlock(void) {
+	assert(s_spi_mutex);
+	xSemaphoreGive(s_spi_mutex);
+}
 
 void tdeck_board_init(void) {
 	if (s_inited) return;
@@ -67,6 +80,8 @@ void tdeck_board_init(void) {
 		.max_transfer_sz = TDECK_LCD_H_RES * TDECK_LCD_V_RES * sizeof(uint16_t) + 8,
 	};
 	ESP_ERROR_CHECK(spi_bus_initialize(TDECK_SPI_HOST, &buscfg, SPI_DMA_CH_AUTO));
+	s_spi_mutex = xSemaphoreCreateMutex();
+	assert(s_spi_mutex);
 
 	ESP_LOGI(TAG, "T-Deck board init done");
 }

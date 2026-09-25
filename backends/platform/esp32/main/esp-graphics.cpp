@@ -112,6 +112,7 @@ static void streamRectToPanel(esp_lcd_panel_handle_t panel,
                               const uint16_t *src_fb, int src_pitch_px,
                               int x0, int y0, int x1, int y1) {
 	if (x1 <= x0 || y1 <= y0) return;
+	tdeck_spi_lock();
 	int w = x1 - x0;
 	int which = 0;
 	for (int y = y0; y < y1; y += DMA_STRIP_ROWS) {
@@ -139,6 +140,7 @@ static void streamRectToPanel(esp_lcd_panel_handle_t panel,
 		xSemaphoreTake(s_lcd_done_sem, portMAX_DELAY);
 		s_lcd_in_flight--;
 	}
+	tdeck_spi_unlock();
 }
 
 bool EspGraphicsManager::hasFeature(OSystem::Feature f) const {
@@ -179,6 +181,7 @@ void EspGraphicsManager::init() {
 	panel_config.bits_per_pixel = TDECK_LCD_BITS_PER_PIXEL;
 	ESP_ERROR_CHECK(esp_lcd_new_panel_st7789(_io_handle, &panel_config, &_panel_handle));
 
+	tdeck_spi_lock();
 	ESP_ERROR_CHECK(esp_lcd_panel_reset(_panel_handle));
 	ESP_ERROR_CHECK(esp_lcd_panel_init(_panel_handle));
 	ESP_ERROR_CHECK(esp_lcd_panel_invert_color(_panel_handle, true));
@@ -191,6 +194,7 @@ void EspGraphicsManager::init() {
 	// 20-pixel row offset to the landscape X axis.
 	ESP_ERROR_CHECK(esp_lcd_panel_set_gap(_panel_handle, 20, 0));
 	ESP_ERROR_CHECK(esp_lcd_panel_disp_on_off(_panel_handle, true));
+	tdeck_spi_unlock();
 
 	// Lilka's backlight is not driven by a dedicated GPIO.
 

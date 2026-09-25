@@ -79,6 +79,11 @@ extern "C" {
  * drivers touch the bus. Idempotent on repeated calls from the same task. */
 void tdeck_board_init(void);
 
+/* Serialize the LCD's queued DMA transfers with the SD card's polling SPI
+ * transfers. Hold the lock until all queued LCD callbacks have completed. */
+void tdeck_spi_lock(void);
+void tdeck_spi_unlock(void);
+
 #ifdef __cplusplus
 }
 #endif
