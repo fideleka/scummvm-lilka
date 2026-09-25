@@ -4,6 +4,9 @@ This branch builds the **Kyra-only** guest. The original SCUMM-only image and
 its device-test notes remain on `feature/lilka-scumm-only`. See
 `README-LILKA-KYRA.md` for this branch's build, SD layout, and validation.
 
+Physical A (GPIO5) is the primary left click and B (GPIO6) is the secondary
+right click when using the example manifest's A/B actions.
+
 This is an experimental ESP-IDF 5.3.2 build of the `scumm` engine only. It is
 separate from Keira; Keira's `.scummvm` manager lives on its own
 `feature/scummvm-manager` branch. A matching manager build can pass a
