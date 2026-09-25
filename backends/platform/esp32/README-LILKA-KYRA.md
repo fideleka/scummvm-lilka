@@ -1,7 +1,7 @@
-# Lilka v2 Kyra-only guest
+# Lilka v2 Kyra engine notes
 
-This branch builds ScummVM's `kyra` engine separately from the existing
-SCUMM-only guest. It is intended for *The Legend of Kyrandia* (game ID
+The general `feature/lilka-scummvm` branch builds ScummVM's `kyra` engine as
+its own image alongside the SCUMM image. It is intended for *The Legend of Kyrandia* (game ID
 `kyra1`). Game data is not included.
 
 Physical A (GPIO5) is the primary left click and B (GPIO6) is the secondary
@@ -30,5 +30,6 @@ its `feature/scummvm-manager` branch. Its `engine: "kyra"` field selects
 `kyra.bin` from Keira's fixed registry; the Kyra guest accepts only that
 image's RTC command and revalidates the manifest as Kyra before launching.
 
-This image has not yet been tested on Lilka. Boot, gameplay, controls, saves,
-and return to Keira require a device test.
+Kyra has reached its opening movie on Lilka. The corrected physical A/B order,
+longer gameplay, saves across restart, and return to Keira still need a device
+test after Anton builds the updated source.
