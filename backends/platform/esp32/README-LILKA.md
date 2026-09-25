@@ -1,5 +1,8 @@
 # Lilka v2 SCUMM guest — first hardware candidate
 
+Physical A (GPIO5) is the primary left click and B (GPIO6) is the secondary
+right click when using the example manifest's A/B actions.
+
 This is an experimental ESP-IDF 5.3.2 build of the `scumm` engine only. It is
 separate from Keira; Keira's `.scummvm` manager lives on its own
 `feature/scummvm-manager` branch. A matching manager build can pass a
