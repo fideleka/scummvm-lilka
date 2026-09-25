@@ -179,12 +179,11 @@ void OSystem_esp32::initBackend() {
 
 }
 
-// Lilka v2 buttons are active-low with pull-ups (SDK config.h).
-// The first hardware test found physical B sending the primary click with
-// the SDK's A/B pin order, so swap those two inputs for physical A primary.
+// Lilka v2 buttons are active-low with pull-ups. Match the SDK's physical
+// A=GPIO5/B=GPIO6 mapping; manifest actions determine left/right click.
 static constexpr gpio_num_t kButtonPins[] = {
     GPIO_NUM_38, GPIO_NUM_41, GPIO_NUM_39, GPIO_NUM_40, // directions
-    GPIO_NUM_6, GPIO_NUM_5, GPIO_NUM_10, GPIO_NUM_9,   // physical A/B/C/D
+    GPIO_NUM_5, GPIO_NUM_6, GPIO_NUM_10, GPIO_NUM_9,   // physical A/B/C/D
     GPIO_NUM_4, GPIO_NUM_0                              // Start/Select
 };
 enum ButtonIndex { UP, DOWN, LEFT, RIGHT, A, B, C, D, START, SELECT, BUTTON_COUNT };

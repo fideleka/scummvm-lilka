@@ -4,6 +4,9 @@ This branch builds ScummVM's `kyra` engine separately from the existing
 SCUMM-only guest. It is intended for *The Legend of Kyrandia* (game ID
 `kyra1`). Game data is not included.
 
+Physical A (GPIO5) is the primary left click and B (GPIO6) is the secondary
+right click when using the example manifest's A/B actions.
+
 Build **both** implemented engines with ESP-IDF 5.3.2 using
 `./compile-all-lilka.sh` from the repository root. It builds `scumm` and
 `kyra` sequentially in isolated Git worktrees and writes
