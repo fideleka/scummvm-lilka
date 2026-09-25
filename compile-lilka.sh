@@ -71,11 +71,16 @@ echo "$engine-only application image: $engine_image"
 echo "Raw Lilka guest: $image"
 echo "Size: $image_bytes / $slot_bytes bytes (free: $((slot_bytes - image_bytes)))"
 
-windows_copy_dir="/mnt/d/Software/scummvm-lilka"
+windows_copy_dir="${LILKA_WINDOWS_COPY_DIR:-/mnt/d/Software/scummvm-lilka}"
 if [[ -d "$windows_copy_dir" ]]; then
     windows_copy="$windows_copy_dir/$engine.bin"
     cp -f "$image" "$windows_copy"
     echo "Windows copy: $windows_copy"
+    if [[ "$engine" == kyra ]]; then
+        windows_data_copy="$windows_copy_dir/kyra.dat"
+        cp -f "$repo_dir/dists/engine-data/kyra.dat" "$windows_data_copy"
+        echo "Windows support data: $windows_data_copy"
+    fi
 fi
 
 echo "Copy this application image to the SD card as scummvm/engines/$engine.bin."

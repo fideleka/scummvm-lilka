@@ -11,6 +11,9 @@ Build **both** implemented engines with ESP-IDF 5.3.2 using
 `build/lilka-engines/kyra.dat`, plus checksums. `IDF_PATH` may point to a
 non-default ESP-IDF 5.3.2 installation. To build just one engine, use
 `./compile-lilka.sh scumm` or `./compile-lilka.sh kyra` from a clean checkout.
+When `/mnt/d/Software/scummvm-lilka` exists (WSL), the script also copies
+both engine images and `kyra.dat` there. `LILKA_WINDOWS_COPY_DIR` can override
+that destination.
 Each raw image is checked against the 0x640000-byte Lilka guest-slot limit.
 Do not flash the T-Deck merged image or the partition table to Lilka.
 
