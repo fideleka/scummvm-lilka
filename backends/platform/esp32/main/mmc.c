@@ -18,7 +18,6 @@
 #include "esp_log.h"
 #include "esp_check.h"
 #include "esp_vfs_fat.h"
-#include "esp_littlefs.h"
 #include "sdmmc_cmd.h"
 #include "driver/sdspi_host.h"
 #include "blkcache.h"
@@ -66,33 +65,7 @@ void sdcard_mount_blkcache(const char *mountpoint, int files) {
 	// The shared SPI bus must already be initialized by tdeck_board_init().
 	tdeck_board_init();
 
-	// Mount the baked-in LittleFS partition first, at /sdcard. This is
-	// always present so ScummVM can find the bundled MI1 EGA demo and
-	// the support files we shipped with the firmware. If a real SD card
-	// is also inserted, it will be exposed at /sd (see below) so its
-	// contents are still reachable but don't shadow the bundled data.
-	{
-		esp_vfs_littlefs_conf_t lfs_cfg = {
-			.base_path = mountpoint,
-			.partition_label = "storage",
-			.format_if_mount_failed = false,
-			.dont_mount = false,
-		};
-		esp_err_t le = esp_vfs_littlefs_register(&lfs_cfg);
-		if (le != ESP_OK) {
-			ESP_LOGE(TAG, "LittleFS mount failed: %s", esp_err_to_name(le));
-		} else {
-			size_t total = 0, used = 0;
-			if (esp_littlefs_info("storage", &total, &used) == ESP_OK) {
-				ESP_LOGI(TAG, "LittleFS mounted at %s: %u/%u bytes used",
-				         mountpoint, (unsigned)used, (unsigned)total);
-			}
-		}
-	}
-
-	// Now ALSO try to mount the physical SD card at /sd (a different
-	// mount point). If it fails, no harm done — the bundled LittleFS
-	// game still works.
+	// Lilka stores all game data, configuration, and saves on physical SD.
 	sdmmc_host_t host = SDSPI_HOST_DEFAULT();
 	host.slot = TDECK_SPI_HOST;
 	host.max_freq_khz = SDMMC_FREQ_PROBING;
@@ -108,8 +81,7 @@ void sdcard_mount_blkcache(const char *mountpoint, int files) {
 
 	esp_err_t err = sdmmc_card_init(&host, &card);
 	if (err != ESP_OK) {
-		ESP_LOGW(TAG, "Physical SD card init failed: %s (LittleFS at %s still works)",
-		         esp_err_to_name(err), mountpoint);
+		ESP_LOGE(TAG, "Physical SD card init failed: %s", esp_err_to_name(err));
 		return;
 	}
 	ESP_LOGI(TAG, "Physical SD card detected, mounting at /sd");
@@ -143,7 +115,7 @@ void sdcard_mount_blkcache(const char *mountpoint, int files) {
 
 	char drv[3] = {'0' + pdrv, ':', 0};
 	esp_vfs_fat_conf_t conf = {
-		.base_path = "/sd",   // physical SD card lives at /sd
+		.base_path = mountpoint,
 		.fat_drive = drv,
 		.max_files = files,
 	};

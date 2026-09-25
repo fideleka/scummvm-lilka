@@ -32,8 +32,13 @@
 #include "esp_log.h"
 #include "posixesp-fs-factory.h"
 #include "tdeck_board.h"
-#include "tdeck_kbd.h"
-#include "tdeck_trackball.h"
+#include "driver/gpio.h"
+#include "esp_system.h"
+#include "esp_rom_sys.h"
+#include "soc/rtc_cntl_reg.h"
+#include "soc/soc.h"
+#include "soc/usb_serial_jtag_reg.h"
+#include <algorithm>
 
 #define TAG "main"
 
@@ -56,6 +61,20 @@
 #include "freertos/semphr.h"
 #include "esp_timer.h"
 #include "mmc.h"
+
+// Follow the device-proven Lilka SDK USB detach/PHY handoff. ESP-IDF 5.3's
+// esp_restart_noos_dig() is only linked on ESP32, so S3 uses the ROM system
+// reset call. The guest return still requires device validation.
+[[noreturn]] static void returnToKeira() {
+	CLEAR_PERI_REG_MASK(USB_SERIAL_JTAG_CONF0_REG, USB_SERIAL_JTAG_USB_PAD_ENABLE);
+	vTaskDelay(pdMS_TO_TICKS(2000));
+	CLEAR_PERI_REG_MASK(
+		RTC_CNTL_USB_CONF_REG, RTC_CNTL_SW_HW_USB_PHY_SEL | RTC_CNTL_SW_USB_PHY_SEL | RTC_CNTL_USB_PAD_ENABLE);
+	CLEAR_PERI_REG_MASK(USB_SERIAL_JTAG_CONF0_REG, USB_SERIAL_JTAG_PHY_SEL);
+	SET_PERI_REG_MASK(USB_SERIAL_JTAG_CONF0_REG, USB_SERIAL_JTAG_USB_PAD_ENABLE);
+	esp_rom_software_reset_system();
+	while (true) {}
+}
 
 class OSystem_esp32 : public ModularMixerBackend, public ModularGraphicsBackend, Common::EventSource {
 public:
@@ -111,191 +130,105 @@ void OSystem_esp32::initBackend() {
 	_mixerManager = new EspMixerManager(44100, 2048);
 	_mixerManager->init();
 
-	ConfMan.registerDefault("extrapath", Common::Path("/sdcard/scummvm/extras/"));
-	ConfMan.registerDefault("iconspath", Common::Path("/sdcard/scummvm/icons/"));
-	ConfMan.registerDefault("pluginspath", Common::Path("/sdcard/scummvm/plugins/"));
-	ConfMan.registerDefault("savepath", Common::Path("/sdcard/scummvm/saves/"));
-	ConfMan.registerDefault("themepath", Common::Path("/sdcard/scummvm/"));
-	// Pin the GUI theme to one we actually ship in SPIFFS, so ScummVM
-	// doesn't fall back to its built-in theme — that one is too tall
-	// for our 320x240 panel and pushes dialog buttons off the bottom.
+	ConfMan.registerDefault("extrapath", Common::Path("/sd/scummvm/data/engine-data/"));
+	ConfMan.registerDefault("iconspath", Common::Path("/sd/scummvm/icons/"));
+	ConfMan.registerDefault("pluginspath", Common::Path("/sd/scummvm/plugins/"));
+	ConfMan.registerDefault("savepath", Common::Path("/sd/scummvm/saves/"));
+	ConfMan.registerDefault("themepath", Common::Path("/sd/scummvm/data/themes/"));
+	// Theme assets are supplied on the SD card by the user.
 	ConfMan.registerDefault("gui_theme", "scummmodern");
 	ConfMan.registerDefault("gui_renderer", "normal");
-	// Open the file browser at the games directory by default so the
-	// user doesn't have to navigate from / through SPIFFS' minimal
-	// directory listing.
-	ConfMan.registerDefault("browser_lastpath", "/sdcard/games");
+	ConfMan.registerDefault("browser_lastpath", "/sd/games/scummvm");
 
 	BaseBackend::initBackend();
 
-	// Pre-add (or overwrite) the bundled MI1 EGA demo so the launcher
-	// shows it without needing the file browser. Always overwrites in
-	// case a stale config from an earlier boot points at a missing path.
-	{
-		const char *gameDomain = "monkey-demo";
-		const char *gamePath = "/sdcard/games/monkey1";
-		struct stat st;
-		if (stat("/sdcard/games/monkey1/000.lfl", &st) == 0) {
-			if (ConfMan.hasGameDomain(gameDomain)) {
-				ConfMan.removeGameDomain(gameDomain);
-			}
-			ConfMan.addGameDomain(gameDomain);
-			ConfMan.set("engineid",    "scumm",                       gameDomain);
-			ConfMan.set("gameid",      "monkey",                      gameDomain);
-			ConfMan.set("description", "Monkey Island 1 (EGA Demo)",  gameDomain);
-			ConfMan.set("path",        gamePath,                       gameDomain);
-			ConfMan.set("platform",    "pc",                           gameDomain);
-			ConfMan.set("language",    "en",                           gameDomain);
-			ConfMan.set("extra",       "Demo",                         gameDomain);
-			ConfMan.set("guioptions",  "lang_English sndNoSpeech",     gameDomain);
-			ConfMan.flushToDisk();
-			ESP_LOGI(TAG, "Pre-registered Monkey Island 1 EGA demo at %s", gamePath);
-		} else {
-			ESP_LOGW(TAG, "MI1 demo data not found at %s", gamePath);
-		}
-	}
 }
 
-// Map the BBQ10 raw byte (mostly ASCII) to a (KeyCode, ascii) pair.
-// The BBQ10 firmware reports ASCII for letters/digits/punctuation, and
-// a handful of dedicated codes for the control keys. The numbers here
-// match the arturo182 keyboard firmware used by the T-Deck.
-//
-// Special keys:
-//   0x08 = backspace, 0x0a/0x0d = enter, 0x1b = escape, ' '   = space
-//   0x81..0x84 = left/up/right/down, 0x06 = sym, 0x11/0x12 = shift/alt
-//   0x03 = speaker (mapped to F5 = save), 0x05 = mic (F7 = load menu)
-static void mapBbq10(uint8_t raw, Common::KeyCode &kc, uint16 &ascii) {
-	kc = Common::KEYCODE_INVALID;
-	ascii = 0;
-	if (raw >= 'a' && raw <= 'z') {
-		kc = (Common::KeyCode)(Common::KEYCODE_a + (raw - 'a'));
-		ascii = raw;
-		return;
-	}
-	if (raw >= 'A' && raw <= 'Z') {
-		kc = (Common::KeyCode)(Common::KEYCODE_a + (raw - 'A'));
-		ascii = raw;
-		return;
-	}
-	if (raw >= '0' && raw <= '9') {
-		kc = (Common::KeyCode)(Common::KEYCODE_0 + (raw - '0'));
-		ascii = raw;
-		return;
-	}
-	switch (raw) {
-	case 0x08: kc = Common::KEYCODE_BACKSPACE; ascii = Common::ASCII_BACKSPACE; return;
-	case 0x0a:
-	case 0x0d: kc = Common::KEYCODE_RETURN; ascii = Common::ASCII_RETURN; return;
-	case 0x1b: kc = Common::KEYCODE_ESCAPE; ascii = Common::ASCII_ESCAPE; return;
-	case ' ':  kc = Common::KEYCODE_SPACE; ascii = ' '; return;
-	case '.':  kc = Common::KEYCODE_PERIOD; ascii = '.'; return;
-	case ',':  kc = Common::KEYCODE_COMMA; ascii = ','; return;
-	case '?':  kc = Common::KEYCODE_SLASH; ascii = '?'; return;
-	case '!':  kc = Common::KEYCODE_1; ascii = '!'; return;
-	case '@':  kc = Common::KEYCODE_2; ascii = '@'; return;
-	case '#':  kc = Common::KEYCODE_3; ascii = '#'; return;
-	case '$':  kc = Common::KEYCODE_4; ascii = '$'; return;
-	case '%':  kc = Common::KEYCODE_5; ascii = '%'; return;
-	case '^':  kc = Common::KEYCODE_6; ascii = '^'; return;
-	case '&':  kc = Common::KEYCODE_7; ascii = '&'; return;
-	case '*':  kc = Common::KEYCODE_8; ascii = '*'; return;
-	case '(':  kc = Common::KEYCODE_9; ascii = '('; return;
-	case ')':  kc = Common::KEYCODE_0; ascii = ')'; return;
-	case '-':  kc = Common::KEYCODE_MINUS; ascii = '-'; return;
-	case '_':  kc = Common::KEYCODE_UNDERSCORE; ascii = '_'; return;
-	case '=':  kc = Common::KEYCODE_EQUALS; ascii = '='; return;
-	case '+':  kc = Common::KEYCODE_PLUS; ascii = '+'; return;
-	case '/':  kc = Common::KEYCODE_SLASH; ascii = '/'; return;
-	case '\\': kc = Common::KEYCODE_BACKSLASH; ascii = '\\'; return;
-	case '\'': kc = Common::KEYCODE_QUOTE; ascii = '\''; return;
-	case '"':  kc = Common::KEYCODE_QUOTEDBL; ascii = '"'; return;
-	case ':':  kc = Common::KEYCODE_COLON; ascii = ':'; return;
-	case ';':  kc = Common::KEYCODE_SEMICOLON; ascii = ';'; return;
-	// Arrow keys (BBQ10 reports the printable glyphs on these buttons)
-	case 0x81: kc = Common::KEYCODE_LEFT; return;
-	case 0x82: kc = Common::KEYCODE_UP; return;
-	case 0x83: kc = Common::KEYCODE_DOWN; return;
-	case 0x84: kc = Common::KEYCODE_RIGHT; return;
-	// Dedicated shortcut keys on the T-Deck
-	case 0x03: kc = Common::KEYCODE_F5; ascii = Common::ASCII_F5; return; // speaker -> save menu
-	case 0x05: kc = Common::KEYCODE_F7; ascii = Common::ASCII_F7; return; // mic     -> load menu
-	case 0x06: kc = Common::KEYCODE_LALT; return;                        // sym     -> alt
-	case 0x11: kc = Common::KEYCODE_LSHIFT; return;
-	case 0x12: kc = Common::KEYCODE_LALT; return;
-	default: return;
-	}
+// Lilka v2 buttons are active-low with pull-ups (SDK config.h).
+static constexpr gpio_num_t kButtonPins[] = {
+    GPIO_NUM_38, GPIO_NUM_41, GPIO_NUM_39, GPIO_NUM_40, // directions
+    GPIO_NUM_5, GPIO_NUM_6, GPIO_NUM_10, GPIO_NUM_9,   // A/B/C/D
+    GPIO_NUM_4, GPIO_NUM_0                              // Start/Select
+};
+enum ButtonIndex { UP, DOWN, LEFT, RIGHT, A, B, C, D, START, SELECT, BUTTON_COUNT };
+static bool s_buttonDown[BUTTON_COUNT] = {};
+static int64_t s_directionSinceUs = 0;
+static int64_t s_exitChordSinceUs = 0;
+
+static void lilka_buttons_init() {
+    for (gpio_num_t pin : kButtonPins) {
+        gpio_config_t cfg = {};
+        cfg.pin_bit_mask = 1ULL << pin;
+        cfg.mode = GPIO_MODE_INPUT;
+        cfg.pull_up_en = GPIO_PULLUP_ENABLE;
+        ESP_ERROR_CHECK(gpio_config(&cfg));
+    }
 }
 
 bool OSystem_esp32::pollEvent(Common::Event &event) {
-	((DefaultTimerManager *)getTimerManager())->checkTimers();
+    ((DefaultTimerManager *)getTimerManager())->checkTimers();
+    event.type = Common::EVENT_INVALID;
 
-	event.type = Common::EVENT_INVALID;
+    const int64_t now = esp_timer_get_time();
+    bool down[BUTTON_COUNT];
+    for (int i = 0; i < BUTTON_COUNT; ++i)
+        down[i] = gpio_get_level(kButtonPins[i]) == 0;
 
-	// 1. Drain the BBQ10 keyboard queue first so typing feels responsive.
-	tdeck_kbd_event_t k;
-	if (tdeck_kbd_poll(&k)) {
-		Common::KeyCode kc;
-		uint16 ascii;
-		mapBbq10(k.raw, kc, ascii);
-		if (kc != Common::KEYCODE_INVALID) {
-			event.type = k.pressed ? Common::EVENT_KEYDOWN : Common::EVENT_KEYUP;
-			event.kbd.keycode = kc;
-			event.kbd.ascii = ascii;
-			event.kbd.flags = 0;
-			return true;
-		}
-	}
+    // Hold both buttons to exit; a transient combination cannot quit a game.
+    if (down[START] && down[SELECT]) {
+        if (!s_exitChordSinceUs) s_exitChordSinceUs = now;
+        if (now - s_exitChordSinceUs >= 1500000) returnToKeira();
+    } else {
+        s_exitChordSinceUs = 0;
+    }
 
-	// 2. Trackball: poll at most every 1/60 s so we don't spam EVENT_MOUSEMOVE.
-	if ((esp_timer_get_time() - _last_input_poll_us) > (1000000 / 60)) {
-		_last_input_poll_us = esp_timer_get_time();
-		tdeck_trackball_state_t tb;
-		tdeck_trackball_poll(&tb);
+    for (int i = A; i < BUTTON_COUNT; ++i) {
+        if (down[i] == s_buttonDown[i]) continue;
+        s_buttonDown[i] = down[i];
+        if (i == A || i == B) {
+            event.type = i == A ? (down[i] ? Common::EVENT_LBUTTONDOWN : Common::EVENT_LBUTTONUP)
+                                : (down[i] ? Common::EVENT_RBUTTONDOWN : Common::EVENT_RBUTTONUP);
+            event.mouse = _mousePos;
+            return true;
+        }
+        if (i == SELECT) {
+            if (down[i] && !down[START]) {
+                event.type = Common::EVENT_VIRTUAL_KEYBOARD;
+                return true;
+            }
+            continue;
+        }
+        event.type = down[i] ? Common::EVENT_KEYDOWN : Common::EVENT_KEYUP;
+        event.kbd.keycode = i == C ? Common::KEYCODE_F5 :
+                            i == D ? Common::KEYCODE_F7 : Common::KEYCODE_RETURN;
+        event.kbd.ascii = i == C ? Common::ASCII_F5 :
+                          i == D ? Common::ASCII_F7 : Common::ASCII_RETURN;
+        event.kbd.flags = 0;
+        return true;
+    }
 
-		// Click edges take precedence so a tap isn't swallowed.
-		if (tb.click_down == 1) {
-			event.type = Common::EVENT_LBUTTONDOWN;
-			event.mouse = _mousePos;
-			return true;
-		}
-		if (tb.click_down == -1) {
-			event.type = Common::EVENT_LBUTTONUP;
-			event.mouse = _mousePos;
-			return true;
-		}
-
-		if (tb.dx != 0 || tb.dy != 0) {
-			int newX = _mousePos.x + tb.dx;
-			int newY = _mousePos.y + tb.dy;
-			int maxX = 0, maxY = 0;
-			if (_graphicsManager && _graphicsManager->isOverlayVisible()) {
-				maxX = _graphicsManager->getOverlayWidth() - 1;
-				maxY = _graphicsManager->getOverlayHeight() - 1;
-			} else if (_graphicsManager && _graphicsManager->getWidth() > 0) {
-				maxX = _graphicsManager->getWidth() - 1;
-				maxY = _graphicsManager->getHeight() - 1;
-			} else if (_graphicsManager) {
-				maxX = _graphicsManager->getOverlayWidth() - 1;
-				maxY = _graphicsManager->getOverlayHeight() - 1;
-			}
-			if (newX < 0) newX = 0;
-			if (newY < 0) newY = 0;
-			if (newX > maxX) newX = maxX;
-			if (newY > maxY) newY = maxY;
-			_mousePos = Common::Point(newX, newY);
-			event.type = Common::EVENT_MOUSEMOVE;
-			event.mouse = _mousePos;
-			// Keep the graphics manager's software cursor in sync so
-			// updateScreen draws it at the right spot.
-			if (_graphicsManager) {
-				_graphicsManager->warpMouse(newX, newY);
-			}
-			return true;
-		}
-	}
-
-	return false;
+    if (now - _last_input_poll_us < 16667) return false;
+    _last_input_poll_us = now;
+    int dx = (int)down[RIGHT] - (int)down[LEFT];
+    int dy = (int)down[DOWN] - (int)down[UP];
+    if (!dx && !dy) {
+        s_directionSinceUs = 0;
+        return false;
+    }
+    if (!s_directionSinceUs) s_directionSinceUs = now;
+    const int step = now - s_directionSinceUs > 500000 ? 4 : 1;
+    const int maxX = _graphicsManager->isOverlayVisible() ?
+        _graphicsManager->getOverlayWidth() - 1 : _graphicsManager->getWidth() - 1;
+    const int maxY = _graphicsManager->isOverlayVisible() ?
+        _graphicsManager->getOverlayHeight() - 1 : _graphicsManager->getHeight() - 1;
+    const int x = std::max(0, std::min(maxX, (int)_mousePos.x + dx * step));
+    const int y = std::max(0, std::min(maxY, (int)_mousePos.y + dy * step));
+    if (x == _mousePos.x && y == _mousePos.y) return false;
+    _mousePos = Common::Point(x, y);
+    _graphicsManager->warpMouse(x, y);
+    event.type = Common::EVENT_MOUSEMOVE;
+    event.mouse = _mousePos;
+    return true;
 }
 
 Common::MutexInternal *OSystem_esp32::createMutex() {
@@ -325,7 +258,7 @@ void OSystem_esp32::getTimeAndDate(TimeDate &td, bool skipRecord) const {
 }
 
 void OSystem_esp32::quit() {
-	exit(0);
+	returnToKeira();
 }
 
 void OSystem_esp32::logMessage(LogMessageType::Type type, const char *message) {
@@ -344,16 +277,16 @@ void OSystem_esp32::logMessage(LogMessageType::Type type, const char *message) {
 }
 
 void OSystem_esp32::addSysArchivesToSearchSet(Common::SearchSet &s, int priority) {
-	s.add("engine-data", new Common::FSDirectory("/sdcard/scummvm/", 4), priority);
-	s.add("gui/themes", new Common::FSDirectory("/sdcard/scummvm/", 4), priority);
+	s.add("engine-data", new Common::FSDirectory("/sd/scummvm/data/engine-data/", 4), priority);
+	s.add("gui/themes", new Common::FSDirectory("/sd/scummvm/data/themes/", 4), priority);
 }
 
 Common::Path OSystem_esp32::getDefaultConfigFileName() {
-	return "/sdcard/scummvm/scummvm.ini";
+	return "/sd/scummvm/scummvm.ini";
 }
 
 Common::Path OSystem_esp32::getDefaultLogFileName() {
-	return "/sdcard/scummvm/scummvm.log";
+	return "/sd/scummvm/scummvm.log";
 }
 
 OSystem *OSystem_esp32_create(bool silenceLogs) {
@@ -369,6 +302,7 @@ void main_task(void *param) {
 	int res = scummvm_main(sizeof(argv)/sizeof(argv[0]), argv);
 	ESP_LOGW(TAG, "Scummvm_main done");
 	g_system->destroy();
+	returnToKeira();
 }
 
 int app_main() {
@@ -390,9 +324,10 @@ int app_main() {
 		stack_depth, 1, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
 	assert(taskbuf && stackbuf);
 
-	tdeck_kbd_init();
-	tdeck_trackball_init();
-	sdcard_mount_blkcache("/sdcard", 15);
+	lilka_buttons_init();
+	sdcard_mount_blkcache("/sd", 15);
+	mkdir("/sd/scummvm", 0777);
+	mkdir("/sd/scummvm/saves", 0777);
 
 	g_system = OSystem_esp32_create(false);
 	assert(g_system);

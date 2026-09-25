@@ -128,7 +128,7 @@ private:
 	// DMA-capable RAM so esp_lcd_panel_draw_bitmap can stream straight
 	// from it.
 	uint16_t *_panelfb = nullptr;
-	int _panelW = 320;
+	int _panelW = 280;
 	int _panelH = 240;
 
 public:

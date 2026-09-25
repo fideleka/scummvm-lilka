@@ -2,6 +2,10 @@
 ScummVM for LilyGo T-Deck (ESP32-S3)
 ====================================
 
+**Lilka feature branch:** the instructions below describe the original
+T-Deck image and must not be used to flash Lilka. See
+[README-LILKA.md](README-LILKA.md) for the raw Keira multiboot guest.
+
 A port of [ScummVM](https://github.com/scummvm/scummvm) to the
 [LilyGo T-Deck v1](https://github.com/Xinyuan-LilyGO/T-Deck): ESP32-S3,
 16 MB flash, 8 MB octal PSRAM, 320×240 ST7789 SPI display, MAX98357A I2S

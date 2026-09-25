@@ -35,20 +35,6 @@ void tdeck_board_init(void) {
 	if (s_inited) return;
 	s_inited = true;
 
-	// Bring up the peripheral power rail first. Without this the
-	// LCD, SD slot, trackpad and radio stay unpowered.
-	gpio_config_t pwr_cfg = {
-		.pin_bit_mask = 1ULL << TDECK_PERI_POWERON_GPIO,
-		.mode = GPIO_MODE_OUTPUT,
-		.pull_up_en = GPIO_PULLUP_DISABLE,
-		.pull_down_en = GPIO_PULLDOWN_DISABLE,
-		.intr_type = GPIO_INTR_DISABLE,
-	};
-	ESP_ERROR_CHECK(gpio_config(&pwr_cfg));
-	ESP_ERROR_CHECK(gpio_set_level(TDECK_PERI_POWERON_GPIO, 1));
-	// Let the rails settle before any device probes the bus.
-	vTaskDelay(pdMS_TO_TICKS(50));
-
 	// Pre-drive ALL SPI chip-select pins high so that adding one device
 	// (e.g. the SD card) doesn't accidentally chatter the LCD controller
 	// because its CS is still floating. The real owners of these pins

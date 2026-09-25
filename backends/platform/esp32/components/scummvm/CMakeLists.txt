@@ -1,11 +1,11 @@
 
 #Enable engines to compile in here.
-# T-Deck S3 starter set — small and fast to build. Add more once the
-# base system is stable (see README for the full list of candidates).
-set(ENGINES scumm agi sky queen dreamweb)
+# Lilka's guest OTA slot is 0x640000 bytes. Start with one engine and
+# measure the complete raw application image before adding others.
+set(ENGINES scumm)
 
 #Sub-engines (indicated by a dash in the ./configure help)
-set(SUBENGINES he)
+set(SUBENGINES)
 
 #Note you may need to delete the build/ directory to force a reconfigure after 
 #changing this.

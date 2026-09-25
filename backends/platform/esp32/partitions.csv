@@ -1,6 +1,9 @@
-# ESP-IDF Partition Table
-# Name,     Type, SubType, Offset,   Size,     Flags
-nvs,        data, nvs,     0x9000,   24K,
-phy_init,   data, phy,     0xf000,   4K,
-factory,    app,  factory, 0x10000,  11M,
-storage,    data, littlefs, ,        4M,
+# Lilka v2 partition layout. Keep byte-for-byte addresses and sizes aligned
+# with Keira's default_16MB.csv; only the raw app image is distributed.
+# Name,   Type, SubType, Offset,  Size, Flags
+nvs,      data, nvs,     0x9000,  0x5000,
+otadata,  data, ota,     0xe000,  0x2000,
+app0,     app,  ota_0,   0x10000, 0x640000,
+app1,     app,  ota_1,   0x650000,0x640000,
+spiffs,   data, spiffs,  0xc90000,0x360000,
+coredump, data, coredump,0xFF0000,0x10000,

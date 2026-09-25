@@ -7,12 +7,9 @@ idf_component_register(
 		"mmc.c"
 		"esp-mutex.cpp"
 		"tdeck_board.c"
-		"tdeck_kbd.c"
-		"tdeck_trackball.c"
 	INCLUDE_DIRS "."
 	PRIV_REQUIRES
 		driver
-		esp_driver_i2c
 		esp_driver_i2s
 		esp_driver_sdspi
 		esp_driver_spi
@@ -20,7 +17,6 @@ idf_component_register(
 		esp_timer
 		fatfs
 		sdmmc
-		joltwallet__littlefs
 		vfs
 		blkcache
 		scummvm

@@ -10,11 +10,3 @@ cmake_minimum_required(VERSION 3.16)
 
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 project(scummvm)
-
-# Build a LittleFS image from flash_data/ and bundle it with idf.py flash.
-# LittleFS (vs SPIFFS) gives us real directories, which ScummVM needs in
-# order to stat() the game data path before launching.
-littlefs_create_partition_image(storage
-	${CMAKE_CURRENT_SOURCE_DIR}/flash_data
-	FLASH_IN_PROJECT
-)

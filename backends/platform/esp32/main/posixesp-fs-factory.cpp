@@ -20,11 +20,9 @@
  */
 
 // This is custom to ESP-IDF as it doesn't show the directories in /. As such,
-// this hacks in /sdcard as the root / cwd. It also subclasses
+// this sets /sd as the root / cwd. It also subclasses
 // POSIXFilesystemNode so that exists()/isReadable()/isWritable() use stat()
-// instead of access(): the joltwallet/littlefs VFS does not implement the
-// access() syscall, so the default POSIXFilesystemNode incorrectly reports
-// every path as non-existent on a LittleFS-backed mount.
+// instead of access() for consistent behavior on the SD-backed VFS.
 
 // Re-enable some forbidden symbols to avoid clashes with stat.h and unistd.h.
 // Also with clock() in sys/time.h in some macOS SDKs.
@@ -50,8 +48,7 @@ class POSIXESPFilesystemNode : public POSIXFilesystemNode {
 public:
 	explicit POSIXESPFilesystemNode(const Common::String &p) : POSIXFilesystemNode(p) {}
 
-	// joltwallet/littlefs doesn't implement access(), so use stat() to
-	// answer existence/permission queries.
+	// Use stat() to answer existence/permission queries.
 	bool exists() const override {
 		struct stat st;
 		return stat(getPath().c_str(), &st) == 0;
@@ -65,10 +62,7 @@ public:
 		return stat(getPath().c_str(), &st) == 0;
 	}
 
-	// joltwallet/littlefs sets d_type=1 (DT_FIFO) on every entry instead
-	// of DT_REG/DT_DIR, which causes the default POSIXFilesystemNode
-	// implementation to drop every directory entry as invalid. Override
-	// getChildren to ignore d_type entirely and stat() each entry.
+	// Some FAT VFS versions do not report reliable d_type. Stat each entry.
 	bool getChildren(AbstractFSList &list, ListMode mode, bool hidden) const override {
 		Common::String path = getPath();
 		DIR *dirp = opendir(path.c_str());
@@ -101,11 +95,11 @@ public:
 } // namespace
 
 AbstractFSNode *POSIXESPFilesystemFactory::makeRootFileNode() const {
-	return new POSIXESPFilesystemNode("/sdcard/");
+	return new POSIXESPFilesystemNode("/sd/");
 }
 
 AbstractFSNode *POSIXESPFilesystemFactory::makeCurrentDirectoryFileNode() const {
-	return new POSIXESPFilesystemNode("/sdcard/");
+	return new POSIXESPFilesystemNode("/sd/");
 }
 
 AbstractFSNode *POSIXESPFilesystemFactory::makeFileNodePath(const Common::String &path) const {

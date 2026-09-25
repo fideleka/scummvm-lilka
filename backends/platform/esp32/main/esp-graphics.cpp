@@ -187,15 +187,12 @@ void EspGraphicsManager::init() {
 	// T-Deck v1 needs MX on, MY off.
 	ESP_ERROR_CHECK(esp_lcd_panel_swap_xy(_panel_handle, true));
 	ESP_ERROR_CHECK(esp_lcd_panel_mirror(_panel_handle, true, false));
-	ESP_ERROR_CHECK(esp_lcd_panel_set_gap(_panel_handle, 0, 0));
+	// Lilka's 240x280 glass is centred in ST7789 RAM; rotation moves the
+	// 20-pixel row offset to the landscape X axis.
+	ESP_ERROR_CHECK(esp_lcd_panel_set_gap(_panel_handle, 20, 0));
 	ESP_ERROR_CHECK(esp_lcd_panel_disp_on_off(_panel_handle, true));
 
-	// Backlight on.
-	gpio_config_t bl_cfg = {};
-	bl_cfg.pin_bit_mask = 1ULL << TDECK_LCD_BL_GPIO;
-	bl_cfg.mode = GPIO_MODE_OUTPUT;
-	ESP_ERROR_CHECK(gpio_config(&bl_cfg));
-	gpio_set_level(TDECK_LCD_BL_GPIO, 1);
+	// Lilka's backlight is not driven by a dedicated GPIO.
 
 	// Panel framebuffer lives in PSRAM (cheap, plentiful). Real DMA
 	// transfers go through s_dma_strip below.

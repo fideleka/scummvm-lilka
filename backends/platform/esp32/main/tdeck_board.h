@@ -19,14 +19,8 @@
  *
  */
 
-/*
- * LilyGo T-Deck v1 (ESP32-S3) pin map.
- *
- * These pin numbers come from the upstream T-Deck schematic /
- * LilyGo's reference firmware (github.com/Xinyuan-LilyGO/T-Deck).
- * If a revision of the hardware ships with a different pin map,
- * only this file should need to change.
- */
+/* Lilka v2 pin map. Names retain the inherited backend's TDECK prefix
+ * until the hardware backend is fully separated. Source: Lilka SDK config.h. */
 
 #ifndef BACKENDS_PLATFORM_ESP32_TDECK_BOARD_H
 #define BACKENDS_PLATFORM_ESP32_TDECK_BOARD_H
@@ -38,33 +32,29 @@
 extern "C" {
 #endif
 
-/* ----- Global peripheral power (must be driven high before any of the
- *        SPI / I2C / I2S / LCD rails are used) ------------------------ */
-#define TDECK_PERI_POWERON_GPIO     GPIO_NUM_10
-
-/* ----- Shared SPI bus (LCD + SD + LoRa share one host) --------------- */
+/* ----- Shared SPI bus (LCD + SD) ------------------------------------- */
 #define TDECK_SPI_HOST              SPI2_HOST
-#define TDECK_SPI_SCK_GPIO          GPIO_NUM_40
-#define TDECK_SPI_MOSI_GPIO         GPIO_NUM_41
-#define TDECK_SPI_MISO_GPIO         GPIO_NUM_38
+#define TDECK_SPI_SCK_GPIO          GPIO_NUM_18
+#define TDECK_SPI_MOSI_GPIO         GPIO_NUM_17
+#define TDECK_SPI_MISO_GPIO         GPIO_NUM_8
 
-/* ----- ST7789 LCD (320x240, SPI) ------------------------------------- */
-#define TDECK_LCD_H_RES             320
+/* ----- ST7789 LCD (280x240 landscape, SPI) --------------------------- */
+#define TDECK_LCD_H_RES             280
 #define TDECK_LCD_V_RES             240
 #define TDECK_LCD_BITS_PER_PIXEL    16
-#define TDECK_LCD_CS_GPIO           GPIO_NUM_12
-#define TDECK_LCD_DC_GPIO           GPIO_NUM_11
+#define TDECK_LCD_CS_GPIO           GPIO_NUM_7
+#define TDECK_LCD_DC_GPIO           GPIO_NUM_15
 #define TDECK_LCD_RST_GPIO          GPIO_NUM_NC
-#define TDECK_LCD_BL_GPIO           GPIO_NUM_42
+#define TDECK_LCD_BL_GPIO           GPIO_NUM_NC
 #define TDECK_LCD_PIXEL_CLOCK_HZ    (40 * 1000 * 1000)
 #define TDECK_LCD_SPI_MODE          0
 #define TDECK_LCD_CMD_BITS          8
 #define TDECK_LCD_PARAM_BITS        8
 
 /* ----- MAX98357A (I2S) speaker amp ----------------------------------- */
-#define TDECK_I2S_BCLK_GPIO         GPIO_NUM_7
-#define TDECK_I2S_LRCK_GPIO         GPIO_NUM_5
-#define TDECK_I2S_DOUT_GPIO         GPIO_NUM_6
+#define TDECK_I2S_BCLK_GPIO         GPIO_NUM_42
+#define TDECK_I2S_LRCK_GPIO         GPIO_NUM_1
+#define TDECK_I2S_DOUT_GPIO         GPIO_NUM_2
 
 /* ----- I2C bus (BBQ10 keyboard + touchpad) --------------------------- */
 #define TDECK_I2C_PORT              0
@@ -82,7 +72,7 @@ extern "C" {
 #define TDECK_TRACKBALL_CLICK_GPIO  GPIO_NUM_0
 
 /* ----- microSD (SPI mode, shares SPI host with LCD) ------------------ */
-#define TDECK_SD_CS_GPIO            GPIO_NUM_39
+#define TDECK_SD_CS_GPIO            GPIO_NUM_16
 
 /* Turn on the peripheral power rail and set up the shared SPI bus.
  * Must be called exactly once, before any of the LCD / SD / trackpad
