@@ -52,4 +52,12 @@ fi
 
 echo "Raw Lilka guest: $image"
 echo "Size: $image_bytes / $slot_bytes bytes (free: $((slot_bytes - image_bytes)))"
+
+windows_copy_dir="/mnt/d/Software/scummvm-lilka"
+if [[ -d "$windows_copy_dir" ]]; then
+    windows_copy="$windows_copy_dir/scummvm.bin"
+    cp -f "$image" "$windows_copy"
+    echo "Windows copy: $windows_copy"
+fi
+
 echo "Copy this application image to the SD card as scummvm/engines/scumm.bin."
