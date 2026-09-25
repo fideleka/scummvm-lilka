@@ -110,6 +110,12 @@ The layout and display orientation need device validation. Do not regard this
 as a game-ready release until the manifest handoff, save/load cycle, and
 rollback are proven on hardware.
 
+The first direct Maniac Mansion launch stalled on the ScummVM startup logo.
+The exit chord now has an independent FreeRTOS poll task so a blocked
+ScummVM main loop does not prevent returning to Keira. A CPU panic can still
+stop the scheduler: this build uses the ESP-IDF GDB panic stub, so capture the
+serial panic/backtrace to distinguish that case from a main-loop hang.
+
 For manager launches, the `.scummvm` manifest can remap A/B/C/D/Start/Select
 to `leftClick`, `rightClick`, `enter`, `escape`, `space`, `f5`, `f7`,
 `virtualKeyboard`, or `none`. It can also tune D-pad pointer speed with

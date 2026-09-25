@@ -85,6 +85,26 @@ static int s_pointerAccelerationUs = 500000;
 	while (true) {}
 }
 
+// Keep the escape chord responsive while ScummVM is loading or if its main
+// task blocks. A panic stops the scheduler; its serial backtrace is still
+// needed to diagnose that case.
+static void exitChordTask(void *) {
+	int64_t heldSinceUs = 0;
+	while (true) {
+		int64_t now = esp_timer_get_time();
+		if (gpio_get_level(GPIO_NUM_4) == 0 && gpio_get_level(GPIO_NUM_0) == 0) {
+			if (!heldSinceUs) heldSinceUs = now;
+			if (now - heldSinceUs >= 1500000) returnToKeira();
+		} else {
+			heldSinceUs = 0;
+		}
+		vTaskDelay(pdMS_TO_TICKS(25));
+	}
+}
+
+static StaticTask_t s_exitChordTaskBuffer;
+static StackType_t s_exitChordTaskStack[3072];
+
 class OSystem_esp32 : public ModularMixerBackend, public ModularGraphicsBackend, Common::EventSource {
 public:
 	OSystem_esp32(bool silenceLogs);
@@ -135,9 +155,12 @@ void OSystem_esp32::initBackend() {
 	_savefileManager = new DefaultSaveFileManager();
 	EspGraphicsManager *gfx = new EspGraphicsManager();
 	_graphicsManager = gfx;
+	ESP_LOGI(TAG, "Initializing graphics");
 	gfx->init();
+	ESP_LOGI(TAG, "Graphics ready; initializing mixer");
 	_mixerManager = new EspMixerManager(44100, 2048);
 	_mixerManager->init();
+	ESP_LOGI(TAG, "Mixer ready; initializing backend");
 
 	ConfMan.registerDefault("extrapath", Common::Path("/sd/scummvm/data/engine-data/"));
 	ConfMan.registerDefault("iconspath", Common::Path("/sd/scummvm/icons/"));
@@ -150,6 +173,7 @@ void OSystem_esp32::initBackend() {
 	ConfMan.registerDefault("browser_lastpath", "/sd/games/scummvm");
 
 	BaseBackend::initBackend();
+	ESP_LOGI(TAG, "Backend ready");
 	if (s_managedLaunch)
 		ConfMan.setBool("gui_return_to_launcher_at_exit", false, Common::ConfigManager::kTransientDomain);
 
@@ -166,7 +190,6 @@ static constexpr gpio_num_t kButtonPins[] = {
 enum ButtonIndex { UP, DOWN, LEFT, RIGHT, A, B, C, D, START, SELECT, BUTTON_COUNT };
 static bool s_buttonDown[BUTTON_COUNT] = {};
 static int64_t s_directionSinceUs = 0;
-static int64_t s_exitChordSinceUs = 0;
 
 static void lilka_buttons_init() {
     for (gpio_num_t pin : kButtonPins) {
@@ -186,14 +209,6 @@ bool OSystem_esp32::pollEvent(Common::Event &event) {
     bool down[BUTTON_COUNT];
     for (int i = 0; i < BUTTON_COUNT; ++i)
         down[i] = gpio_get_level(kButtonPins[i]) == 0;
-
-    // Hold both buttons to exit; a transient combination cannot quit a game.
-    if (down[START] && down[SELECT]) {
-        if (!s_exitChordSinceUs) s_exitChordSinceUs = now;
-        if (now - s_exitChordSinceUs >= 1500000) returnToKeira();
-    } else {
-        s_exitChordSinceUs = 0;
-    }
 
     for (int i = A; i < BUTTON_COUNT; ++i) {
         if (down[i] == s_buttonDown[i]) continue;
@@ -331,8 +346,10 @@ OSystem *OSystem_esp32_create(bool silenceLogs) {
 extern "C" {
 
 void main_task(void *param) {
+	ESP_LOGI(TAG, "Main task: reading Keira launch request");
 	LilkaLaunchGame game;
 	LilkaLaunchStatus launch = lilkaReadLaunchGame(game);
+	ESP_LOGI(TAG, "Launch request status: %d", static_cast<int>(launch));
 	if (launch == LilkaLaunchStatus::Invalid) returnToKeira();
 	Common::String pathArg;
 	Common::String gameArg;
@@ -360,8 +377,9 @@ void main_task(void *param) {
 		}
 		argv[argc++] = "--auto-detect";
 	}
+	ESP_LOGI(TAG, "Entering scummvm_main");
 	int res = scummvm_main(argc, argv);
-	ESP_LOGW(TAG, "Scummvm_main done");
+	ESP_LOGW(TAG, "scummvm_main returned %d", res);
 	g_system->destroy();
 	returnToKeira();
 }
@@ -386,6 +404,9 @@ int app_main() {
 	assert(taskbuf && stackbuf);
 
 	lilka_buttons_init();
+	TaskHandle_t exitTask = xTaskCreateStaticPinnedToCore(exitChordTask, "exit_chord", 3072, nullptr, 3,
+	                                                    s_exitChordTaskStack, &s_exitChordTaskBuffer, 1);
+	assert(exitTask);
 	sdcard_mount_blkcache("/sd", 15);
 	mkdir("/sd/scummvm", 0777);
 	mkdir("/sd/scummvm/saves", 0777);
