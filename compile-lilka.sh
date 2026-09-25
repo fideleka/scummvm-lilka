@@ -5,6 +5,11 @@ set -e
 repo_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 project_dir="$repo_dir/backends/platform/esp32"
 idf_dir="${IDF_PATH:-$repo_dir/../esp/esp-idf}"
+engine="${1:-scumm}"
+if [[ "$engine" != scumm && "$engine" != kyra ]]; then
+    echo "Usage: $0 [scumm|kyra]" >&2
+    exit 2
+fi
 
 if [[ ! -f "$idf_dir/export.sh" ]]; then
     echo "ESP-IDF not found at: $idf_dir" >&2
@@ -35,7 +40,12 @@ if [[ "$idf_version" != *"v5.3.2"* ]]; then
 fi
 
 cd "$project_dir"
-idf.py build
+idf.py -D "LILKA_ENGINE=$engine" build
+
+if ! grep -q "^ENABLE_${engine^^} = STATIC_PLUGIN$" "$repo_dir/config.mk"; then
+    echo "ScummVM did not configure the requested $engine engine" >&2
+    exit 1
+fi
 
 image="$project_dir/build/scummvm.bin"
 if [[ ! -f "$image" ]]; then
@@ -49,15 +59,23 @@ if (( image_bytes > slot_bytes )); then
     echo "Image is too large for Keira app1: $image_bytes > $slot_bytes bytes" >&2
     exit 1
 fi
+image_magic="$(od -An -tx1 -N1 "$image" | tr -d ' ')"
+if [[ "$image_magic" != e9 ]]; then
+    echo "Not a raw ESP application image: $image (magic $image_magic)" >&2
+    exit 1
+fi
 
+engine_image="$project_dir/build/$engine.bin"
+cp -f "$image" "$engine_image"
+echo "$engine-only application image: $engine_image"
 echo "Raw Lilka guest: $image"
 echo "Size: $image_bytes / $slot_bytes bytes (free: $((slot_bytes - image_bytes)))"
 
 windows_copy_dir="/mnt/d/Software/scummvm-lilka"
 if [[ -d "$windows_copy_dir" ]]; then
-    windows_copy="$windows_copy_dir/scumm.bin"
+    windows_copy="$windows_copy_dir/$engine.bin"
     cp -f "$image" "$windows_copy"
     echo "Windows copy: $windows_copy"
 fi
 
-echo "Copy this application image to the SD card as scummvm/engines/scumm.bin."
+echo "Copy this application image to the SD card as scummvm/engines/$engine.bin."

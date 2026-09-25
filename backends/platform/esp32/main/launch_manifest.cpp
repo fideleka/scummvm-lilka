@@ -20,7 +20,13 @@ constexpr uintptr_t kCommandAddress = 0x50000000;
 constexpr size_t kCommandBytes = 1024;
 constexpr size_t kMaxManifestBytes = 4096;
 constexpr size_t kMaxManifestPath = 512;
+#ifdef LILKA_ENGINE_KYRA
+constexpr char kPrefix[] = "/sd/scummvm/engines/kyra.bin manifest=";
+constexpr char kEngine[] = "kyra";
+#else
 constexpr char kPrefix[] = "/sd/scummvm/engines/scumm.bin manifest=";
+constexpr char kEngine[] = "scumm";
+#endif
 
 struct KernelParams {
 	char cmd[kCommandBytes];
@@ -158,7 +164,7 @@ bool readManifest(const Common::String &path, LilkaLaunchGame &game) {
 	bool controlsValid = parseControls(root, game);
 	delete root;
 	if (schema != "keira-scummvm-v1" || title.empty() || title.size() > 80 ||
-	    engine != "scumm" || !safeGameId(gameId) || !safePath(relativePath, false) ||
+	    engine != kEngine || !safeGameId(gameId) || !safePath(relativePath, false) ||
 	    !safeOption(language) || !safeOption(platform) || !controlsValid) return false;
 
 	size_t slash = path.findLastOf('/');

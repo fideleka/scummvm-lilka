@@ -2,7 +2,7 @@
 #Enable engines to compile in here.
 # Lilka's guest OTA slot is 0x640000 bytes. Start with one engine and
 # measure the complete raw application image before adding others.
-set(ENGINES scumm)
+set(ENGINES ${LILKA_ENGINE})
 
 #Sub-engines (indicated by a dash in the ./configure help)
 set(SUBENGINES)

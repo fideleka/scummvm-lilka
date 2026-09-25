@@ -9,4 +9,8 @@ cmake_minimum_required(VERSION 3.16)
 # ESP-IDF's esp_lcd, i2s_std, i2c, gpio and sdspi_host drivers.
 
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
+set(LILKA_ENGINE "scumm" CACHE STRING "Single ScummVM engine for Lilka guest (scumm or kyra)")
+if(NOT LILKA_ENGINE STREQUAL "scumm" AND NOT LILKA_ENGINE STREQUAL "kyra")
+	message(FATAL_ERROR "Unsupported Lilka engine: ${LILKA_ENGINE}")
+endif()
 project(scummvm)

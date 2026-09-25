@@ -1,4 +1,8 @@
-# Lilka v2 SCUMM guest — first hardware candidate
+# Lilka v2 Kyra guest — second engine candidate
+
+This branch builds the **Kyra-only** guest. The original SCUMM-only image and
+its device-test notes remain on `feature/lilka-scumm-only`. See
+`README-LILKA-KYRA.md` for this branch's build, SD layout, and validation.
 
 This is an experimental ESP-IDF 5.3.2 build of the `scumm` engine only. It is
 separate from Keira; Keira's `.scummvm` manager lives on its own

@@ -26,5 +26,8 @@ idf_component_register(
 )
 
 target_compile_options(${COMPONENT_LIB} PRIVATE -DHAVE_CONFIG_H)
+if(LILKA_ENGINE STREQUAL "kyra")
+	target_compile_definitions(${COMPONENT_LIB} PRIVATE LILKA_ENGINE_KYRA=1)
+endif()
 
 idf_build_set_property(COMPILE_OPTIONS "-Wno-error=reorder" APPEND)
