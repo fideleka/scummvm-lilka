@@ -23,6 +23,9 @@ constexpr size_t kMaxManifestPath = 512;
 #ifdef LILKA_ENGINE_KYRA
 constexpr char kPrefix[] = "/sd/scummvm/engines/kyra.bin manifest=";
 constexpr char kEngine[] = "kyra";
+#elif defined(LILKA_ENGINE_GOB)
+constexpr char kPrefix[] = "/sd/scummvm/engines/gob.bin manifest=";
+constexpr char kEngine[] = "gob";
 #else
 constexpr char kPrefix[] = "/sd/scummvm/engines/scumm.bin manifest=";
 constexpr char kEngine[] = "scumm";

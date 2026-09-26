@@ -6,8 +6,8 @@ repo_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 project_dir="$repo_dir/backends/platform/esp32"
 idf_dir="${IDF_PATH:-$repo_dir/../esp/esp-idf}"
 engine="${1:-scumm}"
-if [[ "$engine" != scumm && "$engine" != kyra ]]; then
-    echo "Usage: $0 [scumm|kyra]" >&2
+if [[ "$engine" != scumm && "$engine" != kyra && "$engine" != gob ]]; then
+    echo "Usage: $0 [scumm|kyra|gob]" >&2
     exit 2
 fi
 

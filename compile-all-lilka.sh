@@ -22,7 +22,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-for engine in scumm kyra; do
+for engine in scumm kyra gob; do
     temp_dir="$(mktemp -d "${TMPDIR:-/tmp}/lilka-$engine.XXXXXXXX")"
     git -C "$repo_dir" -c "safe.directory=$repo_dir" worktree add --detach --quiet "$temp_dir/source" HEAD
     echo "Building $engine from $(git -C "$repo_dir" -c "safe.directory=$repo_dir" rev-parse --short HEAD)"
@@ -34,5 +34,5 @@ done
 
 cp -f "$repo_dir/dists/engine-data/kyra.dat" "$output_dir/kyra.dat"
 echo "Batch output: $output_dir"
-wc -c "$output_dir/scumm.bin" "$output_dir/kyra.bin" "$output_dir/kyra.dat"
-sha256sum "$output_dir/scumm.bin" "$output_dir/kyra.bin" "$output_dir/kyra.dat"
+wc -c "$output_dir/scumm.bin" "$output_dir/kyra.bin" "$output_dir/gob.bin" "$output_dir/kyra.dat"
+sha256sum "$output_dir/scumm.bin" "$output_dir/kyra.bin" "$output_dir/gob.bin" "$output_dir/kyra.dat"

@@ -1,7 +1,7 @@
-# Lilka v2 ScummVM guest — SCUMM and Kyra
+# Lilka v2 ScummVM guest — SCUMM, Kyra and Gob
 
-The single `feature/lilka-scummvm` branch builds separate `scumm.bin` and
-`kyra.bin` guest images. This document retains the SCUMM bring-up and device
+The single `feature/lilka-scummvm` branch builds separate `scumm.bin`,
+`kyra.bin`, and `gob.bin` guest images. This document retains the SCUMM bring-up and device
 notes; see `README-LILKA-KYRA.md` for Kyra-specific data and controls.
 
 Physical A (GPIO5) is the primary left click and B (GPIO6) is the secondary
@@ -17,13 +17,13 @@ raw `.bin` without a manifest continues to show the stock launcher.
 
 ## Build and image
 
-From the repository root, run `./compile-all-lilka.sh` to build both engines,
-or `./compile-lilka.sh scumm` / `./compile-lilka.sh kyra` for one. It loads ESP-IDF 5.3.2 from
+From the repository root, run `./compile-all-lilka.sh` to build all three engines,
+or `./compile-lilka.sh scumm`, `./compile-lilka.sh kyra`, or `./compile-lilka.sh gob` for one. It loads ESP-IDF 5.3.2 from
 the sibling `../esp/esp-idf` directory (or from `IDF_PATH` if set), requires
 `cmake` and `ninja` on `PATH`, builds the project, and checks the image size.
 It does not flash the device. Alternatively, from this directory with
 ESP-IDF 5.3.2 already active, run `idf.py -D LILKA_ENGINE=scumm build`. The
-batch outputs are `build/lilka-engines/scumm.bin`, `kyra.bin`, and `kyra.dat`.
+batch outputs are `build/lilka-engines/scumm.bin`, `kyra.bin`, `gob.bin`, and `kyra.dat`.
 Do not flash the T-Deck merged image, bootloader,
 partition table, or OTA data onto Lilka. The binary must
 remain at or below `0x640000` bytes to fit Keira's `app1` OTA slot. This
@@ -40,7 +40,7 @@ not yet been device/build tested and Windows-mounted drives can be slower.
 Clone from within WSL so build scripts
 retain Unix line endings. The same `compile-all-lilka.sh` works there, including
 its size check; no Windows-specific firmware image is needed.
-After a successful build, the script also copies `scumm.bin`, `kyra.bin`, and
+After a successful build, the script also copies `scumm.bin`, `kyra.bin`, `gob.bin`, and
 `kyra.dat` to `/mnt/d/Software/scummvm-lilka` when that directory exists.
 
 In an **administrator PowerShell** window, install WSL if it is not already
@@ -73,8 +73,8 @@ Ubuntu. For subsequent builds, run `cd /mnt/d/Software/scummvm-lilka`, update
 the branch with `git pull --ff-only` if desired, then run
 `./compile-all-lilka.sh` again.
 If ESP-IDF is installed elsewhere within WSL, set `IDF_PATH` to that path
-before running the script. The outputs are `build/lilka-engines/scumm.bin` and
-`kyra.bin` inside the checkout. Copy those raw images to the SD card under
+before running the script. The outputs are `build/lilka-engines/scumm.bin`,
+`kyra.bin`, and `gob.bin` inside the checkout. Copy those raw images to the SD card under
 `scummvm/engines/`.
 Do not run `idf.py flash` on Lilka.
 
