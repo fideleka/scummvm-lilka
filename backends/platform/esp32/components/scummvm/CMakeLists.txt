@@ -34,6 +34,12 @@ file(REAL_PATH ${COMPONENT_DIR}/../../../../.. SCUMMVM_DIR)
 
 list(TRANSFORM LIBS PREPEND "${SCUMMVM_DIR}/")
 
+# Gob's detector is extracted from libdetect.a after libengines.a has been
+# scanned. Link the small obsolete.o directly so its symbols are unconditional.
+if(LILKA_ENGINE STREQUAL "gob")
+	set(GOB_OBSOLETE_OBJECT "${SCUMMVM_DIR}/engines/obsolete.o")
+endif()
+
 idf_component_register(INCLUDE_DIRS "${SCUMMVM_DIR}/" WHOLE_ARCHIVE)
 
 include(ExternalProject)
@@ -57,15 +63,13 @@ externalproject_add(scummvm_build
 	BUILD_IN_SOURCE 1
 	BUILD_ALWAYS 0
 	BUILD_COMMAND make -j -C "${SCUMMVM_DIR}" libs
-	BUILD_BYPRODUCTS ${LIBS}
+	BUILD_BYPRODUCTS ${LIBS} ${GOB_OBSOLETE_OBJECT}
 	INSTALL_COMMAND ""
 	USES_TERMINAL_CONFIGURE TRUE
 	USES_TERMINAL_BUILD TRUE
 	)
 
-# scummvm_lib introduces libdetect.a again after the main archive list. Gob's
-# detector then references engines/obsolete.o, so rescan libengines.a afterward.
-target_link_libraries(${COMPONENT_LIB} INTERFACE ${LIBS} scummvm_lib "${SCUMMVM_DIR}/engines/libengines.a")
+target_link_libraries(${COMPONENT_LIB} INTERFACE ${GOB_OBSOLETE_OBJECT} ${LIBS} scummvm_lib)
 
 add_prebuilt_library(scummvm_lib ${LIBS} PRIV_REQUIRES espressif__zlib georgik__ogg espressif__libpng)
 
