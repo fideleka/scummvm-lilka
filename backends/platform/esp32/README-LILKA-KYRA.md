@@ -27,7 +27,7 @@ The guest also accepts `kyra.dat` beside `kyra.bin` under
 Place your own compatible game files and a `.scummvm` manifest in a game
 folder. The Keira example is `docs/examples/legend-of-kyrandia.scummvm` on
 its `feature/scummvm-manager` branch. Its `engine: "kyra"` field selects
-`kyra.bin` from Keira's fixed registry; the Kyra guest accepts only that
+`kyra.bin` from Keira's engine-image directory; the Kyra guest accepts only that
 image's RTC command and revalidates the manifest as Kyra before launching.
 
 Kyra has reached its opening movie on Lilka. The corrected physical A/B order,

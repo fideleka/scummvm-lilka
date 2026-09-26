@@ -12,7 +12,7 @@ matching Keira example manifest (`docs/examples/gobliiins.scummvm`,
 `gobliins-2.scummvm`, or `goblins-3.scummvm`) in each game's folder.
 Physical A is the example's primary left click; B is secondary right click.
 
-Keira's `feature/scummvm-manager` branch has the matching fixed `gob` image
-registry entry. The guest checks both the RTC image command and the manifest's
+Keira's `feature/scummvm-manager` branch finds `gob.bin` from the manifest's
+engine name. The guest checks both the RTC image command and the manifest's
 engine field. The raw image must fit the 0x640000-byte guest slot; the build
 script checks this. Gob has not yet been built or tested on Lilka.
