@@ -23,7 +23,7 @@ endforeach()
 
 #The libs compiled by scummvm 'make libs' as defined in esp32.mk
 set(LIBS libdetect.a base/libbase.a ${ENGINE_LIBS}
-	engines/libengines.a gui/libgui.a backends/libbackends.a 
+	engines/libengines.a gui/libgui.a backends/libbackends.a
 	video/libvideo.a image/libimage.a graphics/libgraphics.a 
 	audio/libaudio.a math/libmath.a common/libcommon.a 
 	common/compression/libcompression.a common/formats/libformats.a 
@@ -63,7 +63,9 @@ externalproject_add(scummvm_build
 	USES_TERMINAL_BUILD TRUE
 	)
 
-target_link_libraries(${COMPONENT_LIB} INTERFACE ${LIBS} scummvm_lib)
+# scummvm_lib introduces libdetect.a again after the main archive list. Gob's
+# detector then references engines/obsolete.o, so rescan libengines.a afterward.
+target_link_libraries(${COMPONENT_LIB} INTERFACE ${LIBS} scummvm_lib "${SCUMMVM_DIR}/engines/libengines.a")
 
 add_prebuilt_library(scummvm_lib ${LIBS} PRIV_REQUIRES espressif__zlib georgik__ogg espressif__libpng)
 
