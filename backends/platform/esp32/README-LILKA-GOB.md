@@ -5,8 +5,8 @@ separate `gob.bin` guest image. *Gobliiins*, *Gobliins 2*, and *Goblins Quest 3*
 have game IDs `gob1`, `gob2`, and `gob3`. Game data is not included, and this
 engine does not need a separate `gob.dat` file.
 
-Build it with `./compile-lilka.sh gob`, or include it with the other engines
-using `./compile-all-lilka.sh`. Copy `gob.bin` to
+Build it alone in an isolated worktree with `./compile-all-lilka.sh gob`, or
+include it with the other engines using `./compile-all-lilka.sh`. Copy `gob.bin` to
 `/sd/scummvm/engines/gob.bin`. Place your own compatible game files and the
 matching Keira example manifest (`docs/examples/gobliiins.scummvm`,
 `gobliins-2.scummvm`, or `goblins-3.scummvm`) in each game's folder.
